@@ -1,0 +1,59 @@
+---
+# ILLUSTRATIVE EXAMPLE: created to show how roles can abstract the Azure DevOps
+# REST API. Not tested or verified against a live Azure DevOps organization.
+#
+# PURPOSE
+#   Link two tickets, for example make a task the child of an incident, or mark
+#   a ticket as a duplicate. Setting a new parent replaces the old parent,
+#   because Azure Boards allows only one.
+#
+# AUTOMATION CONTROLLER SETUP (one-time steps: playbooks/tickets/README.md)
+#   Job template
+#     Name ................... ADO - Link tickets
+#     Playbook ............... playbooks/tickets/link_tickets.yml
+#     Everything else as in create_ticket.yml: Run job type, any inventory,
+#     project ado.workitems, Minimal execution environment, and the Azure DevOps
+#     Organization credential (plus Microsoft Azure Resource Manager for a
+#     service principal).
+#
+#   Survey
+#     Question                 Variable            Type             Required  Default / choices
+#     Ticket ID                ticket_id           Integer          yes       the ticket that gets the link
+#     Link type                ticket_link_type    Multiple choice  yes       parent, child, related,
+#                                                                             predecessor, successor,
+#                                                                             duplicate, duplicate_of
+#     Other ticket ID          ticket_target_id    Integer          yes
+#     Action                   ticket_link_state   Multiple choice  no        present, absent (default present)
+#     Link comment             ticket_link_comment Text             no
+- name: Link Azure Boards tickets
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ticket_link_state: present
+    ticket_link_comment: ""
+  tasks:
+    - name: Assert both ticket IDs and a link type were supplied
+      ansible.builtin.assert:
+        that:
+          - ticket_id is defined and ticket_id | string | length > 0
+          - ticket_target_id is defined and ticket_target_id | string | length > 0
+          - ticket_link_type is defined and ticket_link_type | length > 0
+        fail_msg: Supply ticket_id, ticket_target_id and ticket_link_type.
+        quiet: true
+
+    - name: Add or remove the link
+      ansible.builtin.include_role:
+        name: ado.workitems.link
+      vars:
+        link_work_item_id: "{{ ticket_id }}"
+        link_type: "{{ ticket_link_type }}"
+        link_target_id: "{{ ticket_target_id }}"
+        link_state: "{{ ticket_link_state }}"
+        link_comment: "{{ ticket_link_comment }}"
+
+    - name: Report the result
+      ansible.builtin.debug:
+        msg: >-
+          {{ ticket_link_type }} link from {{ ticket_id }} to {{ ticket_target_id }}:
+          {{ link_result.changed | ternary((ticket_link_state == 'present') | ternary('added', 'removed'), 'no change needed') }}

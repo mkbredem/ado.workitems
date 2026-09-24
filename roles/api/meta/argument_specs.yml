@@ -3,6 +3,7 @@ argument_specs:
   main:
     short_description: Call any Azure DevOps Services REST endpoint
     description:
+      - Illustrative example of abstracting the Azure DevOps REST API. Not tested or verified against a live Azure DevOps organization.
       - Builds the URL, injects authentication from the auth role, retries
         throttling and transient errors, refreshes expiring Entra ID tokens and
         turns Azure DevOps error bodies into readable failures.

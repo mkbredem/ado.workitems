@@ -3,6 +3,7 @@ argument_specs:
   main:
     short_description: Create, update or delete many work items
     description:
+      - Illustrative example of abstracting the Azure DevOps REST API. Not tested or verified against a live Azure DevOps organization.
       - Runs the work_item role once per list entry and collects the results.
       - Equivalent of servicenow.itsm.configuration_item_batch for work items.
       - Returns C(batch_results), a list of C(work_item_result) values.

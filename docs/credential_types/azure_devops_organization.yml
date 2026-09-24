@@ -1,4 +1,7 @@
 ---
+# ILLUSTRATIVE EXAMPLE: created to show how roles can abstract the Azure DevOps
+# REST API. Not tested or verified against a live Azure DevOps organization.
+#
 # Custom credential type: Azure DevOps Organization
 #
 # Attach this credential to every job template that uses ado.workitems.

@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: comment
   author: Michael Bredemeier
-  description: Add, edit, delete or list work item comments
+  description: Add, edit, delete or list work item comments (illustrative example, not verified against Azure DevOps)
   license: GPL-3.0-or-later
   min_ansible_version: "2.16"
   platforms:

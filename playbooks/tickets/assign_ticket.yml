@@ -1,0 +1,55 @@
+---
+# ILLUSTRATIVE EXAMPLE: created to show how roles can abstract the Azure DevOps
+# REST API. Not tested or verified against a live Azure DevOps organization.
+#
+# PURPOSE
+#   Assign a ticket to a person, and optionally record why in the discussion.
+#
+# AUTOMATION CONTROLLER SETUP (one-time steps: playbooks/tickets/README.md)
+#   Job template
+#     Name ................... ADO - Assign ticket
+#     Playbook ............... playbooks/tickets/assign_ticket.yml
+#     Everything else as in create_ticket.yml: Run job type, any inventory,
+#     project ado.workitems, Minimal execution environment, and the Azure DevOps
+#     Organization credential (plus Microsoft Azure Resource Manager for a
+#     service principal).
+#
+#   Survey
+#     Question                 Variable            Type             Required  Default / choices
+#     Ticket ID                ticket_id           Integer          yes
+#     Assign to (email)        ticket_assigned_to  Text             yes       the person's sign-in address in
+#                                                                             Azure DevOps; the person must be
+#                                                                             a member of the project
+#     Note                     ticket_note         Textarea         no
+#
+#   Tip
+#     For an on-call handoff, point ticket_assigned_to at a survey default that
+#     you update each rotation, or feed it from an extra variable set by a
+#     scheduled job.
+- name: Assign an Azure Boards ticket
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ticket_note: ""
+  tasks:
+    - name: Assert a ticket ID and assignee were supplied
+      ansible.builtin.assert:
+        that:
+          - ticket_id is defined and ticket_id | string | length > 0
+          - ticket_assigned_to is defined and ticket_assigned_to | length > 0
+        fail_msg: Supply ticket_id and ticket_assigned_to.
+        quiet: true
+
+    - name: Assign the ticket
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_id: "{{ ticket_id }}"
+        work_item_assigned_to: "{{ ticket_assigned_to }}"
+        work_item_history: >-
+          {{ (ticket_note | length > 0) | ternary('Assigned to ' ~ ticket_assigned_to ~ ': ' ~ ticket_note, 'Assigned to ' ~ ticket_assigned_to) }}
+
+    - name: Report the result
+      ansible.builtin.debug:
+        msg: "Ticket {{ ticket_id }} {{ work_item_result.changed | ternary('assigned to', 'was already assigned to') }} {{ ticket_assigned_to }}"

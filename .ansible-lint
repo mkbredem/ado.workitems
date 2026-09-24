@@ -5,6 +5,3 @@ exclude_paths:
   - .ansible/
 mock_modules:
   - ansible.controller.credential_type
-warn_list:
-  # Add a repository key to galaxy.yml once the Git remote exists.
-  - galaxy[no-repository]

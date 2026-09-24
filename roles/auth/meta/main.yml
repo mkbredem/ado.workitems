@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: auth
   author: Michael Bredemeier
-  description: Acquire an Azure DevOps bearer token or PAT header for the ado.workitems roles
+  description: Acquire an Azure DevOps bearer token or PAT header for the ado.workitems roles (illustrative example, not verified against Azure DevOps)
   license: GPL-3.0-or-later
   min_ansible_version: "2.16"
   platforms:

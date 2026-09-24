@@ -1,4 +1,7 @@
 ---
+# ILLUSTRATIVE EXAMPLE: created to show how roles can abstract the Azure DevOps
+# REST API. Not tested or verified against a live Azure DevOps organization.
+#
 # Demonstrates the ServiceNow-style incident flow on Azure Boards.
 #
 # Job template: attach the "Azure DevOps Organization" credential, and a

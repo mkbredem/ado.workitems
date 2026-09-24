@@ -1,0 +1,81 @@
+---
+# ILLUSTRATIVE EXAMPLE: created to show how roles can abstract the Azure DevOps
+# REST API. Not tested or verified against a live Azure DevOps organization.
+#
+# PURPOSE
+#   Change fields on an existing ticket. Blank survey answers leave the field as
+#   it is, so one job template serves every kind of edit. Only fields that differ
+#   are sent, so a rerun reports "ok" instead of "changed".
+#
+# AUTOMATION CONTROLLER SETUP (one-time steps: playbooks/tickets/README.md)
+#   Job template
+#     Name ................... ADO - Update ticket
+#     Playbook ............... playbooks/tickets/update_ticket.yml
+#     Everything else as in create_ticket.yml: Run job type, any inventory,
+#     project ado.workitems, Minimal execution environment, and the Azure DevOps
+#     Organization credential (plus Microsoft Azure Resource Manager for a
+#     service principal).
+#     Prompt on launch ....... turn on for Variables if operators need
+#                              ticket_fields (see below)
+#
+#   Survey
+#     Question                 Variable            Type             Required  Default / choices
+#     Ticket ID                ticket_id           Integer          yes       leave out when a workflow
+#                                                                             supplies ticket_id
+#     New title                ticket_title        Text             no
+#     New description          ticket_description  Textarea         no
+#     New priority             ticket_priority     Multiple choice  no        1, 2, 3, 4
+#     New tags (comma sep.)    ticket_tags         Text             no        replaces the whole tag set
+#     Area path                ticket_area_path    Text             no        for example Project\Team
+#     Iteration path           ticket_iteration    Text             no
+#     Change note              ticket_note         Textarea         no        written to the discussion
+#                                                                             only if something changed
+#
+#   Any other field
+#     Pass a dictionary in extra variables, keyed by field reference name. A null
+#     value clears the field:
+#       ticket_fields:
+#         Microsoft.VSTS.Common.Severity: "2 - High"
+#         Custom.Environment: Production
+- name: Update an Azure Boards ticket
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ticket_title: ""
+    ticket_description: ""
+    ticket_priority: ""
+    ticket_tags: ""
+    ticket_area_path: ""
+    ticket_iteration: ""
+    ticket_note: ""
+    ticket_fields: {}
+  tasks:
+    - name: Assert a ticket ID was supplied
+      ansible.builtin.assert:
+        that:
+          - ticket_id is defined and ticket_id | string | length > 0
+        fail_msg: Supply ticket_id (survey question "Ticket ID" or a workflow artifact).
+        quiet: true
+
+    - name: Apply the changes
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_id: "{{ ticket_id }}"
+        work_item_title: "{{ ticket_title }}"
+        work_item_description: "{{ ticket_description }}"
+        work_item_priority: "{{ ticket_priority }}"
+        work_item_tags: >-
+          {{ (ticket_tags | length > 0)
+             | ternary((ticket_tags | string).split(',') | map('trim') | select | list, '') }}
+        work_item_area_path: "{{ ticket_area_path }}"
+        work_item_iteration_path: "{{ ticket_iteration }}"
+        work_item_fields: "{{ ticket_fields }}"
+        work_item_history: "{{ ticket_note }}"
+
+    - name: Report what changed
+      ansible.builtin.debug:
+        msg: >-
+          Ticket {{ ticket_id }}:
+          {{ work_item_result.changed | ternary('updated ' ~ (work_item_result.patch | map(attribute='path') | join(', ')), 'already up to date') }}

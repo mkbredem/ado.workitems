@@ -1,0 +1,10 @@
+---
+# ILLUSTRATIVE EXAMPLE: not tested or verified against a live Azure DevOps organization.
+#
+# Automation controller reads this file when it syncs a project that points at
+# this repository, and installs the ado.workitems collection from Git so the
+# playbooks under playbooks/ can call the ado.workitems roles.
+collections:
+  - name: https://github.com/mkbredem/ado.workitems.git
+    type: git
+    version: main

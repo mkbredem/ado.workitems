@@ -3,6 +3,7 @@ argument_specs:
   main:
     short_description: Query Azure DevOps work items
     description:
+      - Illustrative example of abstracting the Azure DevOps REST API. Not tested or verified against a live Azure DevOps organization.
       - Selects work items by ID list, saved query, WIQL or field filter, then reads
         them in batches of 200.
       - Equivalent of servicenow.itsm.incident_info, problem_info,

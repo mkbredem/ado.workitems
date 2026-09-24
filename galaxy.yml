@@ -6,6 +6,7 @@ readme: README.md
 authors:
   - Michael Bredemeier (Red Hat Specialist Solutions Architect, Ansible)
 description: >-
+  ILLUSTRATIVE EXAMPLE, NOT TESTED OR VERIFIED AGAINST AZURE DEVOPS.
   Azure DevOps Boards work item management for Ansible Automation Platform.
   Role-based equivalent of the servicenow.itsm record-management modules,
   built on a single REST abstraction role and authenticated with native
@@ -19,10 +20,13 @@ tags:
   - itsm
   - workitems
   - tools
+  - example
 dependencies: {}
+repository: https://github.com/mkbredem/ado.workitems
 build_ignore:
   - .git
   - .gitignore
   - "*.tar.gz"
   - tests/output
   - .ansible
+  - collections

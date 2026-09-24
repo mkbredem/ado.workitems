@@ -1,5 +1,8 @@
 # ado.workitems
 
+> **Illustrative example only. Not tested or verified against Azure DevOps.**
+> This collection was created to illustrate how you could build roles that abstract the Azure DevOps REST API behind a single `api` role, in the way the `servicenow.itsm` collection wraps the ServiceNow API. It has not been tested or verified against a live Azure DevOps organization, Microsoft Entra ID, or an automation controller. The only testing done is against the mock server in `tests/mock/`, which imitates the Azure DevOps endpoints as documented and cannot prove real-world behavior. The collection is not a Red Hat product, is not supported by Red Hat, and is not Red Hat Certified Content. Review, adapt and test it in a non-production Azure DevOps organization before relying on it.
+
 Azure DevOps Boards work item management for Red Hat Ansible Automation Platform, built as roles on top of one REST abstraction role. The collection gives the record-management capability of the `servicenow.itsm` collection to teams whose system of record is Azure Boards.
 
 - Azure DevOps Services (`dev.azure.com`) only. Azure DevOps Server (on-premises) is not supported, because Entra ID tokens do not work against Azure DevOps Server.
@@ -138,6 +141,8 @@ Call an endpoint the roles do not wrap, for example the work item types of a pro
     msg: "{{ api_result.json.value | map(attribute='name') | list }}"
 ```
 
+`playbooks/tickets/` holds one playbook per ticket operation (create, update, comment, assign, transition, link, query, delete, and open-on-job-failure). Each playbook starts with comments that list the automation controller setup it needs: project, credentials, job template, survey questions and workflow placement. `playbooks/tickets/README.md` walks through the shared setup once.
+
 `playbooks/incident_lifecycle.yml` is a survey-ready job template playbook that runs the whole incident flow: open, child task, attachment, resolve.
 
 ## Behavior worth knowing
@@ -156,12 +161,15 @@ The roles run on ansible-core. The platform adds what an Azure Boards integratio
 
 ## Testing
 
+The collection has not been run against a live Azure DevOps organization. The tests below prove the roles are internally consistent and idempotent against a mock server; they do not prove the Azure DevOps or Entra ID behavior the mock server imitates.
+
 `tests/mock/mock_ado_server.py` emulates the Azure DevOps and Entra ID endpoints the roles call. `tests/run_mock_tests.sh` starts the mock server and runs:
 
 - `tests/playbooks/smoke.yml`: create, re-run with no change, transition, child task, comment, attachment upload and download, links, batch, query, delete.
 - `tests/playbooks/check_mode.yml` with `--check`: confirms nothing is saved.
 - `tests/playbooks/service_principal.yml`: Entra ID client credentials with the Microsoft Azure Resource Manager environment variables, and token refresh.
 - `playbooks/incident_lifecycle.yml` twice: the second run reports `changed=0`.
+- Every playbook in `playbooks/tickets/`, including reruns that must report no change, a check mode transition, and a delete that is refused when the confirmation ID does not match.
 
 Filter unit tests: `python3 -m pytest tests/unit`.
 

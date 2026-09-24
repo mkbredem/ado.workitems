@@ -3,6 +3,7 @@ argument_specs:
   main:
     short_description: Authenticate to Azure DevOps Services
     description:
+      - Illustrative example of abstracting the Azure DevOps REST API. Not tested or verified against a live Azure DevOps organization.
       - Resolves an Authorization header for Azure DevOps Services and stores it
         in the C(auth_ado_headers) fact (never logged, never cached).
       - Service principal and managed identity paths request an Entra ID token for

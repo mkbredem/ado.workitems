@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: work_item
   author: Michael Bredemeier
-  description: Create, update or delete an Azure DevOps work item idempotently
+  description: Create, update or delete an Azure DevOps work item idempotently (illustrative example, not verified against Azure DevOps)
   license: GPL-3.0-or-later
   min_ansible_version: "2.16"
   platforms:

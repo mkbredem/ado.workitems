@@ -1,0 +1,97 @@
+---
+# ILLUSTRATIVE EXAMPLE: created to show how roles can abstract the Azure DevOps
+# REST API. Not tested or verified against a live Azure DevOps organization.
+#
+# PURPOSE
+#   Open a ticket (work item) in Azure Boards. When ticket_reference is set, the
+#   playbook finds an existing ticket with that reference tag instead of opening a
+#   duplicate, so the job is safe to rerun.
+#   The new ticket ID is published with set_stats as the workflow artifact
+#   "ticket_id", so later workflow nodes can update, comment on or resolve it.
+#
+# AUTOMATION CONTROLLER SETUP
+#   One-time setup (credential type, credentials, project) is in
+#   playbooks/tickets/README.md. Then create this job template:
+#
+#   Job template
+#     Name ................... ADO - Create ticket
+#     Job type ............... Run (a Check job asks Azure DevOps to validate the
+#                              ticket with validateOnly=true and saves nothing)
+#     Inventory .............. any inventory; the play runs on localhost inside
+#                              the execution environment
+#     Project ................ ado.workitems (the project from the README)
+#     Playbook ............... playbooks/tickets/create_ticket.yml
+#     Execution environment .. Minimal execution environment is enough; the roles
+#                              use only ansible.builtin modules
+#     Credentials ............ Azure DevOps Organization credential, plus a
+#                              Microsoft Azure Resource Manager credential when
+#                              you authenticate with a service principal
+#     Extra variables ........ ado_workitems_project: <project name> if the
+#                              Azure DevOps Organization credential has no
+#                              default project
+#
+#   Survey (Surveys tab, then turn the survey on)
+#     Question                 Variable            Type             Required  Default / choices
+#     Ticket type              ticket_type         Multiple choice  yes       Bug, Issue, Task, User Story
+#                                                                             (use the type names of your
+#                                                                             process template)
+#     Title                    ticket_title        Text             yes       max length 255
+#     Description              ticket_description  Textarea         no
+#     Priority                 ticket_priority     Multiple choice  no        1, 2, 3, 4 (default 2)
+#     Assign to (email)        ticket_assigned_to  Text             no
+#     Tags (comma separated)   ticket_tags         Text             no
+#     External reference       ticket_reference    Text             no        for example INC0012345
+#
+#   Workflow use
+#     Put this job template first in a workflow. Downstream nodes receive
+#     ticket_id automatically from the set_stats artifact; leave ticket_id out of
+#     the downstream surveys.
+- name: Create an Azure Boards ticket
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ticket_description: ""
+    ticket_priority: ""
+    ticket_assigned_to: ""
+    ticket_tags: ""
+    ticket_reference: ""
+    ticket_tag_list: >-
+      {{ (ticket_tags | string).split(',') | map('trim') | select | list
+         + ((ticket_reference | length > 0) | ternary([ticket_reference], [])) }}
+  tasks:
+    - name: Assert the survey supplied a type and title
+      ansible.builtin.assert:
+        that:
+          - ticket_type is defined and ticket_type | length > 0
+          - ticket_title is defined and ticket_title | length > 0
+        fail_msg: Supply ticket_type and ticket_title (survey questions "Ticket type" and "Title").
+        quiet: true
+
+    - name: Open the ticket, or find the one that already has this reference
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_type: "{{ ticket_type }}"
+        # Only match on the reference tag when a reference was given.
+        work_item_match: >-
+          {{ (ticket_reference | length > 0)
+             | ternary({'System.Tags': {'op': 'CONTAINS', 'value': ticket_reference}}, {}) }}
+        work_item_title: "{{ ticket_title }}"
+        work_item_description: "{{ ticket_description }}"
+        work_item_priority: "{{ ticket_priority }}"
+        work_item_assigned_to: "{{ ticket_assigned_to }}"
+        work_item_tags: "{{ (ticket_tag_list | length > 0) | ternary(ticket_tag_list, '') }}"
+
+    - name: Publish the ticket ID for later workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          ticket_id: "{{ work_item_result.id }}"
+          ticket_url: "{{ work_item_result.record.web_url | default('') }}"
+
+    - name: Show the ticket
+      ansible.builtin.debug:
+        msg: >-
+          {{ work_item_result.changed | ternary('Opened or updated', 'Found unchanged') }}
+          {{ work_item_result.record.type | default(ticket_type) }} {{ work_item_result.id }}:
+          {{ work_item_result.record.web_url | default('') }}

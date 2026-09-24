@@ -1,0 +1,101 @@
+---
+# ILLUSTRATIVE EXAMPLE: created to show how roles can abstract the Azure DevOps
+# REST API. Not tested or verified against a live Azure DevOps organization.
+#
+# PURPOSE
+#   List tickets that match simple filters, or a saved Azure Boards query, and
+#   print a short report in the job output. Read only: the job never changes a
+#   ticket, so it is safe to schedule or to grant to read-only users.
+#   The matching IDs are published with set_stats as "ticket_ids", so a later
+#   workflow node can act on them.
+#
+# AUTOMATION CONTROLLER SETUP (one-time steps: playbooks/tickets/README.md)
+#   Job template
+#     Name ................... ADO - Query tickets
+#     Playbook ............... playbooks/tickets/query_tickets.yml
+#     Everything else as in create_ticket.yml: Run job type, any inventory,
+#     project ado.workitems, Minimal execution environment, and the Azure DevOps
+#     Organization credential (plus Microsoft Azure Resource Manager for a
+#     service principal).
+#     Schedule ............... optional: add a schedule (for example weekdays at
+#                              08:00) and a notification template on success to
+#                              send the report to a team channel
+#
+#   Survey (all questions optional; blank filters are ignored)
+#     Question                 Variable              Type             Default / choices
+#     Ticket type              ticket_filter_type    Text             for example Bug
+#     State                    ticket_filter_state   Text             for example Active
+#     Assigned to (email)      ticket_filter_assigned_to Text
+#     Tag                      ticket_filter_tag     Text             for example aap
+#     Saved query ID           ticket_saved_query_id Text             GUID of a saved flat-list query;
+#                                                                     overrides the filters
+#     Maximum results          ticket_max_results    Integer          default 50
+#
+#   Advanced
+#     Pass ticket_wiql in extra variables to run any WIQL query instead, for example
+#       ticket_wiql: >-
+#         SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project
+#         AND [System.ChangedDate] >= @today - 7
+- name: Query Azure Boards tickets
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ticket_filter_type: ""
+    ticket_filter_state: ""
+    ticket_filter_assigned_to: ""
+    ticket_filter_tag: ""
+    ticket_saved_query_id: ""
+    ticket_wiql: ""
+    ticket_max_results: 50
+    ticket_filters: >-
+      {{ {'System.WorkItemType': ticket_filter_type,
+          'System.State': ticket_filter_state,
+          'System.AssignedTo': ticket_filter_assigned_to}
+         | dict2items | rejectattr('value', 'equalto', '') | items2dict
+         | combine((ticket_filter_tag | length > 0)
+                   | ternary({'System.Tags': {'op': 'CONTAINS', 'value': ticket_filter_tag}}, {})) }}
+  tasks:
+    - name: Assert there is something to query
+      ansible.builtin.assert:
+        that:
+          - ticket_filters | length > 0 or ticket_saved_query_id | length > 0 or ticket_wiql | length > 0
+        fail_msg: >-
+          Fill in at least one filter, a saved query ID, or ticket_wiql. An empty
+          query would return every ticket in the project.
+        quiet: true
+
+    - name: Run the query
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item_info
+      vars:
+        work_item_info_filters: "{{ ticket_filters }}"
+        work_item_info_saved_query_id: "{{ ticket_saved_query_id }}"
+        work_item_info_wiql: "{{ ticket_wiql }}"
+        work_item_info_top: "{{ ticket_max_results | int }}"
+        work_item_info_expand: none
+        work_item_info_fields:
+          - System.Id
+          - System.WorkItemType
+          - System.Title
+          - System.State
+          - System.AssignedTo
+          - System.ChangedDate
+
+    - name: Publish the matching IDs for later workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          ticket_ids: "{{ work_item_info_records | map(attribute='id') | list }}"
+
+    - name: Print the count
+      ansible.builtin.debug:
+        msg: "Found {{ work_item_info_records | length }} tickets"
+
+    - name: Print one line per ticket
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.id }} [{{ item.type }}] {{ item.state }}
+          - {{ item.title }} - {{ item.assigned_to | default('unassigned', true) }}
+      loop: "{{ work_item_info_records }}"
+      loop_control:
+        label: "{{ item.id }}"

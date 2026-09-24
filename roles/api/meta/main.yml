@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: api
   author: Michael Bredemeier
-  description: Single REST abstraction for Azure DevOps Services used by every ado.workitems role
+  description: Single REST abstraction for Azure DevOps Services used by every ado.workitems role (illustrative example, not verified against Azure DevOps)
   license: GPL-3.0-or-later
   min_ansible_version: "2.16"
   platforms:

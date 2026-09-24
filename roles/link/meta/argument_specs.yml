@@ -3,6 +3,7 @@ argument_specs:
   main:
     short_description: Manage links between Azure DevOps work items
     description:
+      - Illustrative example of abstracting the Azure DevOps REST API. Not tested or verified against a live Azure DevOps organization.
       - Adds or removes one link on a work item. Idempotent. Setting a parent
         replaces an existing parent, because a work item can have only one.
       - Equivalent of the parent reference on servicenow.itsm.change_request_task and

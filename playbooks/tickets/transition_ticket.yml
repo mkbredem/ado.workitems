@@ -1,0 +1,69 @@
+---
+# ILLUSTRATIVE EXAMPLE: created to show how roles can abstract the Azure DevOps
+# REST API. Not tested or verified against a live Azure DevOps organization.
+#
+# PURPOSE
+#   Move a ticket through its workflow, for example Active, Resolved or Closed,
+#   with a note in the discussion. Azure DevOps enforces the allowed transitions
+#   and required fields for the work item type; if a transition is not allowed,
+#   the job fails with the Azure DevOps message.
+#
+# AUTOMATION CONTROLLER SETUP (one-time steps: playbooks/tickets/README.md)
+#   Job template
+#     Name ................... ADO - Transition ticket
+#     Playbook ............... playbooks/tickets/transition_ticket.yml
+#     Everything else as in create_ticket.yml: Run job type, any inventory,
+#     project ado.workitems, Minimal execution environment, and the Azure DevOps
+#     Organization credential (plus Microsoft Azure Resource Manager for a
+#     service principal).
+#     Job type ............... run it once as Check first: Azure DevOps validates
+#                              the transition with validateOnly=true and nothing
+#                              is saved
+#
+#   Survey
+#     Question                 Variable            Type             Required  Default / choices
+#     Ticket ID                ticket_id           Integer          yes       leave out when a workflow
+#                                                                             supplies ticket_id
+#     New state                ticket_state        Multiple choice  yes       states of your process template;
+#                                                                             Agile Bug: New, Active, Resolved,
+#                                                                             Closed
+#     Reason                   ticket_reason       Text             no        must be a reason Azure DevOps
+#                                                                             allows for this transition
+#     Resolution note          ticket_note         Textarea         no
+#
+#   Workflow use
+#     Remediation workflow: "ADO - Create ticket" -> remediation job template ->
+#     on success: this template with extra variable ticket_state: Resolved;
+#     on failure: "ADO - Comment on ticket". To require sign-off before closing,
+#     put an approval node in front of this template.
+- name: Transition an Azure Boards ticket
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ticket_reason: ""
+    ticket_note: ""
+  tasks:
+    - name: Assert a ticket ID and state were supplied
+      ansible.builtin.assert:
+        that:
+          - ticket_id is defined and ticket_id | string | length > 0
+          - ticket_state is defined and ticket_state | length > 0
+        fail_msg: Supply ticket_id and ticket_state.
+        quiet: true
+
+    - name: Change the state
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_id: "{{ ticket_id }}"
+        work_item_workflow_state: "{{ ticket_state }}"
+        work_item_reason: "{{ ticket_reason }}"
+        work_item_history: >-
+          {{ (ticket_note | length > 0) | ternary(ticket_note, 'State changed to ' ~ ticket_state ~ ' by automation controller') }}
+
+    - name: Report the result
+      ansible.builtin.debug:
+        msg: >-
+          Ticket {{ ticket_id }} {{ work_item_result.changed | ternary('moved to', 'was already') }}
+          {{ ticket_state }}{{ ansible_check_mode | ternary(' (check mode: validated, not saved)', '') }}

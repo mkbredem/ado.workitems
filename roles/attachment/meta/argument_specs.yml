@@ -3,6 +3,7 @@ argument_specs:
   main:
     short_description: Manage files attached to an Azure DevOps work item
     description:
+      - Illustrative example of abstracting the Azure DevOps REST API. Not tested or verified against a live Azure DevOps organization.
       - Uploads a file and links it to a work item, removes attachment links by name,
         or downloads an attachment.
       - Idempotent on file name and SHA-256 checksum. The checksum is kept in the

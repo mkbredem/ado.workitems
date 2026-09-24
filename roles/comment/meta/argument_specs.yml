@@ -3,6 +3,7 @@ argument_specs:
   main:
     short_description: Manage the discussion on an Azure DevOps work item
     description:
+      - Illustrative example of abstracting the Azure DevOps REST API. Not tested or verified against a live Azure DevOps organization.
       - Adds, edits, deletes or lists comments. Adding is idempotent on comment text
         unless C(comment_unique) is false.
       - Equivalent of the C(comments) and C(work_notes) options on the

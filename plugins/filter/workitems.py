@@ -3,6 +3,9 @@
 # GNU General Public License v3.0+ (see LICENSE or https://www.gnu.org/licenses/gpl-3.0.txt)
 """Filters that build Azure DevOps JSON Patch documents and WIQL clauses.
 
+Illustrative example: not tested or verified against a live Azure DevOps
+organization.
+
 The roles in this collection are the user-facing interface. These filters
 exist only because computing an idempotent JSON Patch diff (identity
 fields, tag sets, relation indexes) is unreadable in Jinja.

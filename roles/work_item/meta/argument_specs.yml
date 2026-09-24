@@ -3,6 +3,7 @@ argument_specs:
   main:
     short_description: Create, update or delete an Azure DevOps work item
     description:
+      - Illustrative example of abstracting the Azure DevOps REST API. Not tested or verified against a live Azure DevOps organization.
       - Idempotent. Compares desired fields and parent link with the current work
         item and sends a JSON Patch only for the differences, guarded by a
         revision test so concurrent edits are not overwritten.

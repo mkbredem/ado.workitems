@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: link
   author: Michael Bredemeier
-  description: Add or remove links between work items
+  description: Add or remove links between work items (illustrative example, not verified against Azure DevOps)
   license: GPL-3.0-or-later
   min_ansible_version: "2.16"
   platforms:

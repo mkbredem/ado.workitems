@@ -1,0 +1,59 @@
+---
+# ILLUSTRATIVE EXAMPLE: created to show how roles can abstract the Azure DevOps
+# REST API. Not tested or verified against a live Azure DevOps organization.
+#
+# PURPOSE
+#   Delete a ticket. By default the ticket goes to the Azure Boards recycle bin
+#   and can be restored from there. Permanent destruction needs ticket_destroy
+#   and a project administrator on the Azure DevOps side.
+#   The operator must type the ticket ID twice, so a mistyped survey answer does
+#   not delete the wrong ticket.
+#
+# AUTOMATION CONTROLLER SETUP (one-time steps: playbooks/tickets/README.md)
+#   Job template
+#     Name ................... ADO - Delete ticket
+#     Playbook ............... playbooks/tickets/delete_ticket.yml
+#     Everything else as in create_ticket.yml: Run job type, any inventory,
+#     project ado.workitems, Minimal execution environment, and the Azure DevOps
+#     Organization credential (plus Microsoft Azure Resource Manager for a
+#     service principal).
+#   Access
+#     Grant Execute on this template only to the team that owns ticket hygiene
+#     (job template Team Access or User Access tab). Operators who can run the
+#     other ticket templates do not need it.
+#
+#   Survey
+#     Question                 Variable            Type             Required  Default / choices
+#     Ticket ID                ticket_id           Integer          yes
+#     Type the ID again        ticket_confirm_id   Integer          yes
+#     Destroy permanently      ticket_destroy      Multiple choice  no        false, true (default false)
+- name: Delete an Azure Boards ticket
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ticket_destroy: false
+  tasks:
+    - name: Assert the ticket ID was confirmed
+      ansible.builtin.assert:
+        that:
+          - ticket_id is defined and ticket_id | string | length > 0
+          - ticket_confirm_id is defined
+          - ticket_id | int == ticket_confirm_id | int
+        fail_msg: The two ticket IDs do not match. Nothing was deleted.
+        quiet: true
+
+    - name: Delete the ticket
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_id: "{{ ticket_id }}"
+        work_item_state: absent
+        work_item_destroy: "{{ ticket_destroy | bool }}"
+
+    - name: Report the result
+      ansible.builtin.debug:
+        msg: >-
+          Ticket {{ ticket_id }}:
+          {{ work_item_result.changed
+             | ternary((ticket_destroy | bool) | ternary('destroyed permanently', 'moved to the recycle bin'), 'did not exist') }}

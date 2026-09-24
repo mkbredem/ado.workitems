@@ -1,0 +1,98 @@
+---
+# ILLUSTRATIVE EXAMPLE: created to show how roles can abstract the Azure DevOps
+# REST API. Not tested or verified against a live Azure DevOps organization.
+#
+# PURPOSE
+#   Open (or update) a Bug when a workflow fails, so nobody has to copy failure
+#   details into Azure Boards by hand. The workflow job ID is the correlation
+#   key: relaunching the failure path adds a comment to the same ticket instead
+#   of opening a second one.
+#
+# AUTOMATION CONTROLLER SETUP (one-time steps: playbooks/tickets/README.md)
+#   Job template
+#     Name ................... ADO - Open ticket on failure
+#     Playbook ............... playbooks/tickets/open_ticket_on_failure.yml
+#     Everything else as in create_ticket.yml: Run job type, any inventory,
+#     project ado.workitems, Minimal execution environment, and the Azure DevOps
+#     Organization credential (plus Microsoft Azure Resource Manager for a
+#     service principal).
+#     No survey: the workflow supplies everything.
+#
+#   Workflow
+#     1. Open the workflow job template whose failures should raise tickets.
+#     2. On each node that can fail, add a node on the "On Failure" path that runs
+#        "ADO - Open ticket on failure". One shared failure node is enough when
+#        several nodes converge on it.
+#     3. Optional workflow extra variables:
+#          ticket_failure_type: Bug              # work item type to open
+#          ticket_failure_assigned_to: ops@example.com
+#          ticket_failure_area_path: Project\Operations
+#          ticket_controller_url: https://aap.example.com
+#                                                # adds a link to the job output
+#     4. Automation controller passes awx_workflow_job_id and
+#        awx_workflow_job_name to every job in a workflow; this playbook uses them
+#        for the title, the correlation tag and the comment.
+#   Pair it with "ADO - Transition ticket" on the success path of a later rerun
+#   (extra variable ticket_state: Resolved) to close the loop.
+- name: Open a ticket for a failed workflow
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ticket_failure_type: Bug
+    ticket_failure_assigned_to: ""
+    ticket_failure_area_path: ""
+    ticket_controller_url: ""
+    ticket_workflow_id: "{{ awx_workflow_job_id | default(tower_workflow_job_id | default('local')) }}"
+    ticket_workflow_name: "{{ awx_workflow_job_name | default(tower_workflow_job_name | default('manual run')) }}"
+    ticket_correlation_tag: "aap-workflow-{{ ticket_workflow_id }}"
+    ticket_output_link: >-
+      {{ (ticket_controller_url | length > 0)
+         | ternary(' Job list: ' ~ ticket_controller_url | regex_replace('/+$', '') ~ '/execution/jobs', '') }}
+  tasks:
+    - name: Open the ticket, or find the one for this workflow run
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_type: "{{ ticket_failure_type }}"
+        work_item_match:
+          System.Tags:
+            op: CONTAINS
+            value: "{{ ticket_correlation_tag }}"
+        work_item_title: "Automation failure: {{ ticket_workflow_name }} (workflow job {{ ticket_workflow_id }})"
+        work_item_description: >-
+          <p>Workflow <b>{{ ticket_workflow_name }}</b> (workflow job {{ ticket_workflow_id }}) failed
+          in automation controller.{{ ticket_output_link }}</p>
+        work_item_priority: 2
+        work_item_assigned_to: "{{ ticket_failure_assigned_to }}"
+        work_item_area_path: "{{ ticket_failure_area_path }}"
+        work_item_tags:
+          - aap
+          - automation-failure
+          - "{{ ticket_correlation_tag }}"
+
+    - name: Keep the ticket ID
+      ansible.builtin.set_fact:
+        ticket_failure_id: "{{ work_item_result.id }}"
+        ticket_failure_new: "{{ work_item_result.changed }}"
+
+    - name: Record this failure-path run on the ticket
+      ansible.builtin.include_role:
+        name: ado.workitems.comment
+      vars:
+        comment_work_item_id: "{{ ticket_failure_id }}"
+        comment_unique: false
+        comment_text: >-
+          Failure path ran in automation controller job
+          {{ awx_job_id | default('local') }} for workflow job {{ ticket_workflow_id }}.
+
+    - name: Publish the ticket ID for later workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          ticket_id: "{{ ticket_failure_id }}"
+
+    - name: Report the result
+      ansible.builtin.debug:
+        msg: >-
+          {{ (ticket_failure_new | bool) | ternary('Opened or updated', 'Found existing') }}
+          ticket {{ ticket_failure_id }} for workflow job {{ ticket_workflow_id }}

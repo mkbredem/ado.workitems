@@ -1,0 +1,56 @@
+---
+# ILLUSTRATIVE EXAMPLE: created to show how roles can abstract the Azure DevOps
+# REST API. Not tested or verified against a live Azure DevOps organization.
+#
+# PURPOSE
+#   Add a comment to a ticket's discussion, the equivalent of a ServiceNow work
+#   note. The same text is never posted twice, so reruns are safe.
+#
+# AUTOMATION CONTROLLER SETUP (one-time steps: playbooks/tickets/README.md)
+#   Job template
+#     Name ................... ADO - Comment on ticket
+#     Playbook ............... playbooks/tickets/comment_ticket.yml
+#     Everything else as in create_ticket.yml: Run job type, any inventory,
+#     project ado.workitems, Minimal execution environment, and the Azure DevOps
+#     Organization credential (plus Microsoft Azure Resource Manager for a
+#     service principal).
+#
+#   Survey
+#     Question                 Variable            Type             Required  Default / choices
+#     Ticket ID                ticket_id           Integer          yes       leave out when a workflow
+#                                                                             supplies ticket_id
+#     Comment                  ticket_comment      Textarea         yes
+#     Format                   ticket_comment_format Multiple choice no       markdown, html (default markdown)
+#
+#   Workflow use
+#     Add this template after any job whose result should be recorded on the
+#     ticket. The automation controller job ID is appended to the comment so
+#     readers can find the job output.
+- name: Comment on an Azure Boards ticket
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ticket_comment_format: markdown
+    ticket_job_reference: >-
+      {{ (awx_job_id is defined) | ternary('automation controller job ' ~ awx_job_id | default(''), 'a local run') }}
+  tasks:
+    - name: Assert a ticket ID and comment were supplied
+      ansible.builtin.assert:
+        that:
+          - ticket_id is defined and ticket_id | string | length > 0
+          - ticket_comment is defined and ticket_comment | length > 0
+        fail_msg: Supply ticket_id and ticket_comment.
+        quiet: true
+
+    - name: Add the comment
+      ansible.builtin.include_role:
+        name: ado.workitems.comment
+      vars:
+        comment_work_item_id: "{{ ticket_id }}"
+        comment_text: "{{ ticket_comment }}\n\n_Posted by {{ ticket_job_reference }}_"
+        comment_format: "{{ ticket_comment_format }}"
+
+    - name: Report the result
+      ansible.builtin.debug:
+        msg: "Ticket {{ ticket_id }}: {{ comment_result.changed | ternary('comment added', 'identical comment already present') }}"
