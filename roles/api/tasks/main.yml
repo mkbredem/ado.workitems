@@ -1,0 +1,81 @@
+---
+- name: Authenticate on first use
+  ansible.builtin.include_role:
+    name: ado.workitems.auth
+  when: auth_ado_headers is not defined
+
+- name: Refresh an expiring Entra ID token
+  ansible.builtin.include_role:
+    name: ado.workitems.auth
+  vars:
+    auth_verify: false
+  when:
+    - auth_ado_method != 'pat'
+    - (now().timestamp() | int) > ((auth_ado_token_expires_at | int) - api_token_refresh_margin)
+
+- name: Call the Azure DevOps REST API
+  vars:
+    __api_scope: >-
+      {{ ([auth_ado_base_url]
+          + ((api_project | length > 0) | ternary([api_project | urlencode], []))
+          + ((api_team | length > 0) | ternary([api_team | urlencode], []))
+          + [api_path | regex_replace('^/+', '')]) | join('/') }}
+    __api_base: "{{ (api_url | length > 0) | ternary(api_url, __api_scope) }}"
+    __api_params: >-
+      {{ ((api_version | length > 0 and 'api-version=' not in __api_base)
+          | ternary({'api-version': api_version}, {})) | combine(api_query) }}
+    __api_request_url: >-
+      {{ __api_base }}{% if __api_params | length > 0 %}{{ ('?' in __api_base) | ternary('&', '?') }}{{ __api_params | urlencode }}{% endif %}
+    __api_is_json: "{{ api_body is not none and api_src | length == 0 and api_content_type is search('json') }}"
+  block:
+    - name: Skip write in check mode
+      when:
+        - ansible_check_mode
+        - not api_safe_in_check_mode | bool
+      ansible.builtin.set_fact:
+        api_result:
+          skipped: true
+          status: 0
+          url: "{{ __api_request_url }}"
+          json: {}
+
+    - name: Send request
+      when: not ansible_check_mode or api_safe_in_check_mode | bool
+      ansible.builtin.uri:
+        url: "{{ __api_request_url }}"
+        method: "{{ api_method }}"
+        headers: "{{ auth_ado_headers | combine({'Content-Type': api_content_type}) }}"
+        body: "{{ api_body if api_body is not none else omit }}"
+        body_format: "{{ 'json' if __api_is_json | bool else omit }}"
+        src: "{{ api_src if api_src | length > 0 else omit }}"
+        dest: "{{ api_dest if api_dest | length > 0 else omit }}"
+        return_content: "{{ api_dest | length == 0 }}"
+        status_code: "{{ api_status_code }}"
+        validate_certs: "{{ auth_ado_validate_certs | default(true) }}"
+        timeout: "{{ api_timeout }}"
+      register: api_response
+      until: (api_response.status | default(-1) | int) not in [-1, 429, 500, 502, 503, 504]
+      retries: "{{ api_retries }}"
+      delay: "{{ api_retry_delay }}"
+      changed_when: api_changed | bool
+      check_mode: false
+      no_log: "{{ api_no_log }}"
+
+    - name: Store API result
+      when: not ansible_check_mode or api_safe_in_check_mode | bool
+      ansible.builtin.set_fact:
+        api_result:
+          skipped: false
+          status: "{{ api_response.status }}"
+          url: "{{ __api_request_url }}"
+          json: "{{ api_response.json | default({}) }}"
+          location: "{{ api_response.location | default('') }}"
+  rescue:
+    - name: Report the Azure DevOps error
+      ansible.builtin.fail:
+        msg: >-
+          {{ api_method }} {{ __api_request_url }} returned HTTP
+          {{ api_response.status | default('no response') }}:
+          {{ api_response.json.message
+             | default(api_response.msg | default('no error detail'))
+             | default('no error detail', true) }}

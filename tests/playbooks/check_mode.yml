@@ -1,0 +1,33 @@
+---
+# Run with --check after smoke.yml. Work item 2 (the child task) is Closed.
+- name: Check mode sends validateOnly and saves nothing
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ado_workitems_project: Platform Engineering
+  tasks:
+    - name: Preview a transition to Active
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_id: 2
+        work_item_workflow_state: Active
+
+    - name: Assert the preview reports a change
+      ansible.builtin.assert:
+        that:
+          - work_item_result.changed
+          - work_item_result.check_mode
+          - work_item_result.record.state == 'Active'
+
+    - name: Read the work item back
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item_info
+      vars:
+        work_item_info_ids: [2]
+
+    - name: Assert nothing was saved
+      ansible.builtin.assert:
+        that:
+          - work_item_info_records[0].state == 'Closed'

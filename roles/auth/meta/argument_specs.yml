@@ -1,0 +1,58 @@
+---
+argument_specs:
+  main:
+    short_description: Authenticate to Azure DevOps Services
+    description:
+      - Resolves an Authorization header for Azure DevOps Services and stores it
+        in the C(auth_ado_headers) fact (never logged, never cached).
+      - Service principal and managed identity paths request an Entra ID token for
+        the Azure DevOps resource. The token lifetime is recorded so the api role
+        can refresh it during long jobs.
+      - Output facts are C(auth_ado_base_url), C(auth_ado_headers), C(auth_ado_method),
+        C(auth_ado_token_expires_at) and C(auth_ado_identity).
+    options:
+      auth_method:
+        type: str
+        choices: [auto, service_principal, managed_identity, pat]
+        description: Authentication method.
+      auth_organization:
+        type: str
+        description: Azure DevOps organization name. Defaults to the ADO_ORGANIZATION environment variable.
+      auth_organization_url:
+        type: str
+        description: Full organization URL. Overrides auth_organization.
+      auth_tenant_id:
+        type: str
+        description: Entra ID tenant ID. Defaults to AZURE_TENANT.
+      auth_client_id:
+        type: str
+        description: Application (client) ID. Defaults to AZURE_CLIENT_ID.
+      auth_client_secret:
+        type: str
+        no_log: true
+        description: Client secret. Defaults to AZURE_SECRET.
+      auth_authority_host:
+        type: str
+        description: Entra ID authority host.
+      auth_managed_identity_client_id:
+        type: str
+        description: Client ID of a user-assigned managed identity. Empty uses the system-assigned identity.
+      auth_imds_endpoint:
+        type: str
+        description: Azure Instance Metadata Service token endpoint.
+      auth_pat:
+        type: str
+        no_log: true
+        description: Personal access token. Defaults to ADO_PAT.
+      auth_ado_resource_id:
+        type: str
+        description: Entra ID application ID of Azure DevOps.
+      auth_verify:
+        type: bool
+        description: Verify organization membership with one read call.
+      auth_validate_certs:
+        type: bool
+        description: Validate TLS certificates.
+      auth_timeout:
+        type: int
+        description: HTTP timeout in seconds.

@@ -1,0 +1,41 @@
+---
+argument_specs:
+  main:
+    short_description: Manage the discussion on an Azure DevOps work item
+    description:
+      - Adds, edits, deletes or lists comments. Adding is idempotent on comment text
+        unless C(comment_unique) is false.
+      - Equivalent of the C(comments) and C(work_notes) options on the
+        servicenow.itsm record modules.
+      - Returns C(comment_result) and, for C(list), C(comment_list).
+    options:
+      comment_project:
+        type: str
+        description: Project name or ID.
+      comment_work_item_id:
+        type: int
+        required: true
+        description: Work item ID.
+      comment_state:
+        type: str
+        choices: [present, absent, list]
+        description: Desired state.
+      comment_text:
+        type: str
+        description: Comment text.
+      comment_format:
+        type: str
+        choices: [markdown, html]
+        description: Comment format.
+      comment_id:
+        type: int
+        description: Comment ID to edit or delete.
+      comment_unique:
+        type: bool
+        description: Do not add a comment whose text already exists.
+      comment_top:
+        type: int
+        description: Maximum comments to read.
+      comment_api_version:
+        type: str
+        description: API version for the comments endpoint, which is in preview.

@@ -1,0 +1,30 @@
+---
+- name: Apply work item {{ batch_index }}
+  ansible.builtin.include_role:
+    name: ado.workitems.work_item
+  vars:
+    work_item_state: "{{ batch_item.state | default('present') }}"
+    work_item_project: "{{ batch_item.project | default(batch_project) }}"
+    work_item_id: "{{ batch_item.id | default(none) }}"
+    work_item_match: "{{ batch_item.match | default({}) }}"
+    work_item_type: "{{ batch_item.type | default(none) }}"
+    work_item_title: "{{ batch_item.title | default(none) }}"
+    work_item_description: "{{ batch_item.description | default(none) }}"
+    work_item_workflow_state: "{{ batch_item.workflow_state | default(none) }}"
+    work_item_reason: "{{ batch_item.reason | default(none) }}"
+    work_item_assigned_to: "{{ batch_item.assigned_to | default(none) }}"
+    work_item_area_path: "{{ batch_item.area_path | default(none) }}"
+    work_item_iteration_path: "{{ batch_item.iteration_path | default(none) }}"
+    work_item_priority: "{{ batch_item.priority | default(none) }}"
+    work_item_severity: "{{ batch_item.severity | default(none) }}"
+    work_item_tags: "{{ batch_item.tags | default(none) }}"
+    work_item_fields: "{{ batch_item.fields | default({}) }}"
+    work_item_parent_id: "{{ batch_item.parent_id | default(none) }}"
+    work_item_history: "{{ batch_item.history | default(none) }}"
+    work_item_destroy: "{{ batch_item.destroy | default(false) }}"
+    work_item_bypass_rules: "{{ batch_item.bypass_rules | default(false) }}"
+    work_item_suppress_notifications: "{{ batch_item.suppress_notifications | default(false) }}"
+
+- name: Collect result {{ batch_index }}
+  ansible.builtin.set_fact:
+    batch_results: "{{ batch_results + [work_item_result] }}"

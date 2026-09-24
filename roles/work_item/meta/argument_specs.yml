@@ -1,0 +1,80 @@
+---
+argument_specs:
+  main:
+    short_description: Create, update or delete an Azure DevOps work item
+    description:
+      - Idempotent. Compares desired fields and parent link with the current work
+        item and sends a JSON Patch only for the differences, guarded by a
+        revision test so concurrent edits are not overwritten.
+      - In check mode, creates and updates are sent with C(validateOnly=true) so
+        Azure DevOps validates rules, required fields and state transitions
+        without saving.
+      - Equivalent of servicenow.itsm.incident, problem, change_request,
+        change_request_task and problem_task, with the record type selected by
+        C(work_item_type).
+      - Returns the C(work_item_result) fact with C(changed), C(id), C(record) and C(patch).
+    options:
+      work_item_state:
+        type: str
+        choices: [present, absent]
+        description: Whether the work item exists.
+      work_item_project:
+        type: str
+        description: Project name or ID. Defaults to C(ado_workitems_project).
+      work_item_id:
+        type: raw
+        description: Work item ID to manage.
+      work_item_match:
+        type: dict
+        description: Field values that identify an existing work item when no ID is given.
+      work_item_type:
+        type: str
+        description: Work item type name. Required to create.
+      work_item_title:
+        type: str
+        description: System.Title.
+      work_item_description:
+        type: str
+        description: System.Description (HTML).
+      work_item_workflow_state:
+        type: str
+        description: System.State, for example Active, Resolved or Closed.
+      work_item_reason:
+        type: str
+        description: System.Reason for the state transition.
+      work_item_assigned_to:
+        type: str
+        description: System.AssignedTo as an email address or display name.
+      work_item_area_path:
+        type: str
+        description: System.AreaPath.
+      work_item_iteration_path:
+        type: str
+        description: System.IterationPath.
+      work_item_priority:
+        type: raw
+        description: Microsoft.VSTS.Common.Priority.
+      work_item_severity:
+        type: str
+        description: Microsoft.VSTS.Common.Severity, for example C(2 - High).
+      work_item_tags:
+        type: raw
+        description: System.Tags. The complete tag set.
+      work_item_fields:
+        type: dict
+        description: Additional fields by reference name. A null value clears the field.
+      work_item_parent_id:
+        type: raw
+        description: Parent work item ID.
+      work_item_history:
+        type: str
+        description: Discussion entry written only when the run changes the work item.
+      work_item_destroy:
+        type: bool
+        description: Permanently destroy instead of moving to the recycle bin.
+      work_item_bypass_rules:
+        type: bool
+        description: Bypass work item type rules. Needs the Bypass rules on work item updates permission.
+      work_item_suppress_notifications:
+        type: bool
+        description: Do not send notifications for this change.

@@ -1,0 +1,39 @@
+---
+# Custom credential type: Azure DevOps Organization
+#
+# Attach this credential to every job template that uses ado.workitems.
+# - With a Microsoft Azure Resource Manager credential also attached, the auth
+#   role uses the service principal and ignores the personal access token.
+# - Without it, the auth role uses the personal access token if one is set,
+#   otherwise the execution node's managed identity.
+#
+# Create it in automation controller under Automation Execution >
+# Infrastructure > Credential Types, or run
+# playbooks/configure_credential_type.yml.
+name: Azure DevOps Organization
+kind: cloud
+description: Azure DevOps Services organization, default project and optional personal access token
+inputs:
+  fields:
+    - id: organization
+      type: string
+      label: Organization
+      help_text: Organization name as it appears in https://dev.azure.com/<organization>
+    - id: project
+      type: string
+      label: Default project
+      help_text: Project used when a role does not set one. Optional.
+    - id: pat
+      type: string
+      label: Personal access token
+      secret: true
+      help_text: >-
+        Optional. Needs the Work Items (Read, write and manage) scope. Leave empty
+        to use a service principal or managed identity.
+  required:
+    - organization
+injectors:
+  env:
+    ADO_ORGANIZATION: "{{ organization }}"
+    ADO_PROJECT: "{{ project | default('') }}"
+    ADO_PAT: "{{ pat | default('') }}"

@@ -1,0 +1,147 @@
+---
+- name: Resolve authentication method and organization URL
+  ansible.builtin.set_fact:
+    auth_ado_method: >-
+      {{ (auth_method != 'auto')
+         | ternary(auth_method,
+             (auth_client_id | length > 0 and auth_client_secret | length > 0 and auth_tenant_id | length > 0)
+             | ternary('service_principal', (auth_pat | length > 0) | ternary('pat', 'managed_identity'))) }}
+    auth_ado_base_url: >-
+      {{ (auth_organization_url | length > 0)
+         | ternary(auth_organization_url, 'https://dev.azure.com/' ~ (auth_organization | urlencode)) | regex_replace('/+$', '') }}
+    auth_ado_validate_certs: "{{ auth_validate_certs }}"
+
+- name: Assert an organization is known
+  ansible.builtin.assert:
+    that:
+      - auth_organization | length > 0 or auth_organization_url | length > 0
+    fail_msg: >-
+      Set auth_organization (or the ADO_ORGANIZATION environment variable) or
+      auth_organization_url.
+    quiet: true
+
+- name: Request an Entra ID token with the service principal
+  when: auth_ado_method == 'service_principal'
+  block:
+    - name: Assert service principal inputs are present
+      ansible.builtin.assert:
+        that:
+          - auth_tenant_id | length > 0
+          - auth_client_id | length > 0
+          - auth_client_secret | length > 0
+        fail_msg: >-
+          Service principal authentication needs a tenant ID, client ID and client
+          secret. Attach a Microsoft Azure Resource Manager credential that uses a
+          service principal, or set auth_tenant_id, auth_client_id and
+          auth_client_secret.
+        quiet: true
+
+    - name: Request token from the Entra ID token endpoint
+      ansible.builtin.uri:
+        url: "{{ auth_authority_host | regex_replace('/+$', '') }}/{{ auth_tenant_id }}/oauth2/v2.0/token"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: client_credentials
+          client_id: "{{ auth_client_id }}"
+          client_secret: "{{ auth_client_secret }}"
+          scope: "{{ auth_ado_resource_id }}/.default"
+        validate_certs: "{{ auth_validate_certs }}"
+        timeout: "{{ auth_timeout }}"
+        status_code: [200]
+      register: auth_sp_token_response
+      no_log: true
+      check_mode: false
+
+- name: Request an Entra ID token with the managed identity
+  when: auth_ado_method == 'managed_identity'
+  block:
+    - name: Request token from the Instance Metadata Service
+      ansible.builtin.uri:
+        url: >-
+          {{ auth_imds_endpoint }}?{{ {'api-version': '2018-02-01', 'resource': auth_ado_resource_id}
+             | combine((auth_managed_identity_client_id | length > 0) | ternary({'client_id': auth_managed_identity_client_id}, {}))
+             | urlencode }}
+        method: GET
+        headers:
+          Metadata: "true"
+        timeout: "{{ auth_timeout }}"
+        status_code: [200]
+      register: auth_mi_token_response
+      no_log: true
+      check_mode: false
+  rescue:
+    - name: Explain the managed identity failure
+      ansible.builtin.fail:
+        msg: >-
+          Could not get a managed identity token from {{ auth_imds_endpoint }}.
+          Managed identity only works when the execution node is an Azure virtual
+          machine or scale set with an identity assigned, and the execution
+          environment container can reach 169.254.169.254. If you meant to use a
+          service principal or personal access token, attach that credential to the
+          job template or set auth_method explicitly.
+
+- name: Store bearer token header
+  when: auth_ado_method in ['service_principal', 'managed_identity']
+  ansible.builtin.set_fact:
+    auth_ado_headers:
+      Authorization: "Bearer {{ __token.access_token }}"
+      Accept: application/json
+    auth_ado_token_expires_at: "{{ (now().timestamp() | int) + (__token.expires_in | int) }}"
+  vars:
+    __token: >-
+      {{ (auth_ado_method == 'service_principal')
+         | ternary(auth_sp_token_response.json | default({}), auth_mi_token_response.json | default({})) }}
+  no_log: true
+
+- name: Store personal access token header
+  when: auth_ado_method == 'pat'
+  block:
+    - name: Assert a personal access token is present
+      ansible.builtin.assert:
+        that:
+          - auth_pat | length > 0
+        fail_msg: >-
+          Personal access token authentication needs auth_pat or the ADO_PAT
+          environment variable. See docs/credential_types/azure_devops_pat.yml.
+        quiet: true
+
+    - name: Build basic authentication header from the token
+      ansible.builtin.set_fact:
+        auth_ado_headers:
+          Authorization: "Basic {{ (':' ~ auth_pat) | b64encode }}"
+          Accept: application/json
+        auth_ado_token_expires_at: 0
+      no_log: true
+
+- name: Verify the identity is a member of the organization
+  when: auth_verify | bool
+  block:
+    - name: Read connection data for the authenticated identity
+      ansible.builtin.uri:
+        url: "{{ auth_ado_base_url }}/_apis/connectionData"
+        method: GET
+        headers: "{{ auth_ado_headers }}"
+        validate_certs: "{{ auth_validate_certs }}"
+        timeout: "{{ auth_timeout }}"
+        status_code: [200]
+      register: auth_connection_data
+      check_mode: false
+
+    - name: Record the authenticated identity
+      ansible.builtin.set_fact:
+        auth_ado_identity:
+          id: "{{ auth_connection_data.json.authenticatedUser.id | default('') }}"
+          name: "{{ auth_connection_data.json.authenticatedUser.providerDisplayName | default('') }}"
+          method: "{{ auth_ado_method }}"
+  rescue:
+    - name: Explain the verification failure
+      ansible.builtin.fail:
+        msg: >-
+          Authenticated with method {{ auth_ado_method }} but {{ auth_ado_base_url }}
+          returned HTTP {{ auth_connection_data.status | default('unknown') }}.
+          HTTP 203 or 401 usually means the personal access token is invalid or
+          expired, or the service principal or managed identity was never added to
+          the organization under Organization settings, Users (error TF401444).
+          Service principals and managed identities need an access level of Basic
+          or Stakeholder and project membership to manage work items.

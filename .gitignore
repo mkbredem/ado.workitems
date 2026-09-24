@@ -1,0 +1,5 @@
+tests/output/
+.ansible/
+*.tar.gz
+__pycache__/
+.pytest_cache/

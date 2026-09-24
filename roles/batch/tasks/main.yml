@@ -1,0 +1,12 @@
+---
+- name: Reset batch results
+  ansible.builtin.set_fact:
+    batch_results: []
+
+- name: Apply each work item
+  ansible.builtin.include_tasks: item.yml
+  loop: "{{ batch_work_items }}"
+  loop_control:
+    loop_var: batch_item
+    index_var: batch_index
+    label: "{{ batch_item.id | default(batch_item.title | default(batch_index)) }}"

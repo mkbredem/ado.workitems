@@ -1,0 +1,68 @@
+---
+- name: Checksum the source file
+  ansible.builtin.stat:
+    path: "{{ attachment_src }}"
+    checksum_algorithm: sha256
+    get_checksum: true
+  register: attachment_src_stat
+
+- name: Assert the source file exists
+  ansible.builtin.assert:
+    that:
+      - attachment_src_stat.stat.exists
+      - attachment_src_stat.stat.isreg
+    fail_msg: "{{ attachment_src }} does not exist on the Ansible control node."
+    quiet: true
+
+- name: Decide whether the attachment must be uploaded
+  ansible.builtin.set_fact:
+    attachment_checksum_tag: "sha256:{{ attachment_src_stat.stat.checksum }}"
+    attachment_up_to_date: >-
+      {{ attachment_existing
+         | selectattr('attributes.comment', 'defined')
+         | selectattr('attributes.comment', 'search', 'sha256:' ~ attachment_src_stat.stat.checksum)
+         | list | length > 0 }}
+
+- name: Upload and link the new version
+  when: not attachment_up_to_date | bool
+  block:
+    - name: Upload {{ attachment_resolved_name }}
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: POST
+        api_project: "{{ attachment_project }}"
+        api_path: _apis/wit/attachments
+        api_query:
+          fileName: "{{ attachment_resolved_name }}"
+          uploadType: Simple
+        api_src: "{{ attachment_src }}"
+        api_content_type: application/octet-stream
+        api_status_code: [200, 201]
+        api_changed: true
+
+    - name: Link the upload and replace older versions with the same name
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: PATCH
+        api_project: "{{ attachment_project }}"
+        api_path: "_apis/wit/workitems/{{ attachment_work_item_id }}"
+        api_content_type: application/json-patch+json
+        api_body: >-
+          {{ [{'op': 'test', 'path': '/rev', 'value': attachment_work_item_rev | int}]
+             + (attachment_relations | ado.workitems.relation_patch(
+                  remove=[{'rel': 'AttachedFile', 'name': attachment_resolved_name}]))
+             + [{'op': 'add', 'path': '/relations/-',
+                 'value': {'rel': 'AttachedFile', 'url': api_result.json.url,
+                           'attributes': {'comment': (attachment_comment ~ ' [' ~ attachment_checksum_tag ~ ']') | trim}}}] }}
+        api_changed: true
+
+    - name: Record the upload
+      ansible.builtin.set_fact:
+        attachment_result:
+          changed: true
+          work_item_id: "{{ attachment_work_item_id }}"
+          name: "{{ attachment_resolved_name }}"
+          checksum: "{{ attachment_checksum_tag }}"
+          replaced: "{{ attachment_existing | map(attribute='url') | list }}"

@@ -1,0 +1,28 @@
+---
+namespace: ado
+name: workitems
+version: 1.0.0
+readme: README.md
+authors:
+  - Michael Bredemeier (Red Hat Specialist Solutions Architect, Ansible)
+description: >-
+  Azure DevOps Boards work item management for Ansible Automation Platform.
+  Role-based equivalent of the servicenow.itsm record-management modules,
+  built on a single REST abstraction role and authenticated with native
+  AAP Microsoft Azure Resource Manager credentials, managed identity, or a
+  personal access token.
+license:
+  - GPL-3.0-or-later
+tags:
+  - azure
+  - azuredevops
+  - itsm
+  - workitems
+  - tools
+dependencies: {}
+build_ignore:
+  - .git
+  - .gitignore
+  - "*.tar.gz"
+  - tests/output
+  - .ansible

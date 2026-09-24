@@ -1,0 +1,20 @@
+---
+work_item_info_project: "{{ ado_workitems_project | default(lookup('ansible.builtin.env', 'ADO_PROJECT')) }}"
+
+# Choose one selector. They are evaluated in this order.
+# 1. Explicit IDs
+work_item_info_ids: []
+# 2. Saved query ID (GUID) from Boards, Queries
+work_item_info_saved_query_id: ""
+# 3. Raw WIQL. SELECT columns are ignored; use work_item_info_fields.
+work_item_info_wiql: ""
+# 4. Field filter, AND-joined (same syntax as work_item_match).
+work_item_info_filters: {}
+work_item_info_type: null
+
+# Maximum work items to return from a query (Azure DevOps caps WIQL at 20000).
+work_item_info_top: 200
+# Fields to return. Empty returns all fields. Ignored when expand is relations or all.
+work_item_info_fields: []
+# none | relations | fields | links | all
+work_item_info_expand: relations

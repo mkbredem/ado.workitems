@@ -1,0 +1,132 @@
+---
+- name: Authenticate on first use
+  ansible.builtin.include_role:
+    name: ado.workitems.auth
+  when: auth_ado_headers is not defined
+
+- name: Reset work item state from any earlier call
+  ansible.builtin.set_fact:
+    work_item_current: {}
+    work_item_patch: []
+    work_item_result: {}
+
+- name: Find the existing work item
+  ansible.builtin.include_tasks: lookup.yml
+
+- name: Delete the work item
+  when:
+    - work_item_state == 'absent'
+    - work_item_current | length > 0
+  ansible.builtin.include_role:
+    name: ado.workitems.api
+  vars:
+    api_method: DELETE
+    api_project: "{{ work_item_project }}"
+    api_path: "_apis/wit/workitems/{{ work_item_current.id }}"
+    api_query:
+      destroy: "{{ work_item_destroy | bool | lower }}"
+    api_status_code: [200, 204]
+    api_changed: true
+
+- name: Build the JSON Patch document # noqa: jinja[invalid] field values are only known at run time
+  when: work_item_state == 'present'
+  vars:
+    __desired_fields: >-
+      {{ ({
+            'System.Title': work_item_title,
+            'System.Description': work_item_description,
+            'System.State': work_item_workflow_state,
+            'System.Reason': work_item_reason,
+            'System.AssignedTo': work_item_assigned_to,
+            'System.AreaPath': work_item_area_path,
+            'System.IterationPath': work_item_iteration_path,
+            'Microsoft.VSTS.Common.Priority': work_item_priority,
+            'Microsoft.VSTS.Common.Severity': work_item_severity,
+            'System.Tags': work_item_tags
+          } | dict2items | rejectattr('value', 'none') | rejectattr('value', 'equalto', '') | items2dict)
+         | combine(work_item_fields | default({}, true)) }}
+    __parent_rel: System.LinkTypes.Hierarchy-Reverse
+    __relation_ops: >-
+      {{ (work_item_parent_id | default('', true) | string | length > 0)
+         | ternary(
+             work_item_current.relations | default([]) | ado.workitems.relation_patch(
+               add=[{'rel': __parent_rel,
+                     'url': auth_ado_base_url | ado.workitems.work_item_url(work_item_parent_id | default(0, true))}],
+               exclusive=[__parent_rel]),
+             []) }}
+    __change_ops: >-
+      {{ (__desired_fields | ado.workitems.field_patch(work_item_current.fields | default({}))) + __relation_ops }}
+    __history_ops: >-
+      {{ (__change_ops | length > 0 and (work_item_history | default('', true) | string | length > 0))
+         | ternary([{'op': 'add', 'path': '/fields/System.History', 'value': work_item_history}], []) }}
+  ansible.builtin.set_fact:
+    work_item_patch: "{{ __change_ops + __history_ops }}"
+
+- name: Create the work item
+  when:
+    - work_item_state == 'present'
+    - work_item_current | length == 0
+  block:
+    - name: Assert a work item type is set for create
+      ansible.builtin.assert:
+        that:
+          - (work_item_type | default('', true) | string | length > 0)
+          - work_item_project | length > 0
+        fail_msg: Creating a work item needs work_item_type and work_item_project (or ado_workitems_project).
+        quiet: true
+
+    - name: Send create request
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: POST
+        api_project: "{{ work_item_project }}"
+        api_path: "_apis/wit/workitems/${{ work_item_type | urlencode }}"
+        api_query:
+          validateOnly: "{{ ansible_check_mode | lower }}"
+          bypassRules: "{{ work_item_bypass_rules | bool | lower }}"
+          suppressNotifications: "{{ work_item_suppress_notifications | bool | lower }}"
+          $expand: relations
+        api_content_type: application/json-patch+json
+        api_body: "{{ work_item_patch }}"
+        api_changed: true
+        api_safe_in_check_mode: true
+
+- name: Update the work item
+  when:
+    - work_item_state == 'present'
+    - work_item_current | length > 0
+    - work_item_patch | length > 0
+  ansible.builtin.include_role:
+    name: ado.workitems.api
+  vars:
+    api_method: PATCH
+    api_project: "{{ work_item_project }}"
+    api_path: "_apis/wit/workitems/{{ work_item_current.id }}"
+    api_query:
+      validateOnly: "{{ ansible_check_mode | lower }}"
+      bypassRules: "{{ work_item_bypass_rules | bool | lower }}"
+      suppressNotifications: "{{ work_item_suppress_notifications | bool | lower }}"
+      $expand: relations
+    api_content_type: application/json-patch+json
+    # The revision test makes Azure DevOps reject the patch if someone else
+    # changed the work item since it was read.
+    api_body: "{{ [{'op': 'test', 'path': '/rev', 'value': work_item_current.rev}] + work_item_patch }}"
+    api_changed: true
+    api_safe_in_check_mode: true
+
+- name: Record the work item result
+  vars:
+    __changed: >-
+      {{ (work_item_state == 'absent' and work_item_current | length > 0)
+         or (work_item_state == 'present' and (work_item_current | length == 0 or work_item_patch | length > 0)) }}
+    __item: >-
+      {{ (__changed | bool and work_item_state == 'present') | ternary(api_result.json | default({}), work_item_current) }}
+  ansible.builtin.set_fact:
+    work_item_result:
+      changed: "{{ __changed | bool }}"
+      state: "{{ work_item_state }}"
+      id: "{{ __item.id | default(work_item_current.id | default(none)) }}"
+      record: "{{ (work_item_state == 'present') | ternary(__item | ado.workitems.record, {}) }}"
+      patch: "{{ work_item_patch }}"
+      check_mode: "{{ ansible_check_mode }}"

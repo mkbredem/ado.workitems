@@ -1,0 +1,11 @@
+---
+link_project: "{{ ado_workitems_project | default(lookup('ansible.builtin.env', 'ADO_PROJECT')) }}"
+link_work_item_id: null
+link_state: present
+# Friendly type (parent, child, related, predecessor, successor, duplicate,
+# duplicate_of, tested_by, tests, hyperlink) or any relation reference name.
+link_type: related
+# Target work item ID, or a URL when link_type is hyperlink.
+link_target_id: null
+link_target_url: ""
+link_comment: ""

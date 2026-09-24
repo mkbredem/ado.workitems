@@ -1,0 +1,71 @@
+---
+argument_specs:
+  main:
+    short_description: Call any Azure DevOps Services REST endpoint
+    description:
+      - Builds the URL, injects authentication from the auth role, retries
+        throttling and transient errors, refreshes expiring Entra ID tokens and
+        turns Azure DevOps error bodies into readable failures.
+      - Authenticates on first use, so callers do not have to include the auth role first.
+      - Returns the C(api_result) fact with C(status), C(json), C(url) and C(skipped).
+      - Equivalent of servicenow.itsm.api and servicenow.itsm.api_info.
+    options:
+      api_method:
+        type: str
+        choices: [GET, POST, PATCH, PUT, DELETE]
+        description: HTTP method.
+      api_path:
+        type: str
+        description: Path relative to the organization or project, such as C(_apis/wit/workitems/42).
+      api_url:
+        type: str
+        description: Absolute URL. Overrides api_path and api_project.
+      api_project:
+        type: str
+        description: Project name or ID. Empty calls the organization scope.
+      api_team:
+        type: str
+        description: Team name for team-scoped endpoints.
+      api_query:
+        type: dict
+        description: Query string parameters. C(api-version) is added unless present.
+      api_version:
+        type: str
+        description: REST API version.
+      api_body:
+        type: raw
+        description: Request body.
+      api_content_type:
+        type: str
+        description: Content-Type header, for example C(application/json-patch+json).
+      api_src:
+        type: str
+        description: File on the Ansible control node to upload as the body.
+      api_dest:
+        type: str
+        description: Path to write the response body to.
+      api_status_code:
+        type: list
+        elements: int
+        description: Accepted HTTP status codes.
+      api_changed:
+        type: bool
+        description: Report the call as a change.
+      api_safe_in_check_mode:
+        type: bool
+        description: Execute the call even in check mode.
+      api_retries:
+        type: int
+        description: Retries for HTTP 429, 5xx and connection errors.
+      api_retry_delay:
+        type: int
+        description: Seconds between retries.
+      api_timeout:
+        type: int
+        description: HTTP timeout in seconds.
+      api_token_refresh_margin:
+        type: int
+        description: Seconds before expiry at which an Entra ID token is refreshed.
+      api_no_log:
+        type: bool
+        description: Hide the request and raw response from job output. Errors are still reported.

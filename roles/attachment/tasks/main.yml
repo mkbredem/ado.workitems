@@ -1,0 +1,99 @@
+---
+- name: Resolve the attachment name
+  ansible.builtin.set_fact:
+    attachment_resolved_name: >-
+      {{ (attachment_name | length > 0) | ternary(attachment_name, attachment_src | basename) }}
+    attachment_result:
+      changed: false
+      work_item_id: "{{ attachment_work_item_id }}"
+
+- name: Assert an attachment name is known
+  ansible.builtin.assert:
+    that:
+      - attachment_resolved_name | length > 0
+    fail_msg: Set attachment_src or attachment_name.
+    quiet: true
+
+- name: Read the work item relations
+  ansible.builtin.include_role:
+    name: ado.workitems.api
+  vars:
+    api_method: GET
+    api_project: "{{ attachment_project }}"
+    api_path: "_apis/wit/workitems/{{ attachment_work_item_id }}"
+    api_query:
+      $expand: relations
+    api_safe_in_check_mode: true
+
+- name: Keep current attachment links
+  ansible.builtin.set_fact:
+    attachment_work_item_rev: "{{ api_result.json.rev }}"
+    attachment_relations: "{{ api_result.json.relations | default([], true) }}"
+    attachment_existing: >-
+      {{ api_result.json.relations | default([], true)
+         | selectattr('rel', 'equalto', 'AttachedFile')
+         | selectattr('attributes.name', 'defined')
+         | selectattr('attributes.name', 'equalto', attachment_name | default(attachment_src | basename, true))
+         | list }}
+
+- name: Upload and link the attachment
+  when: attachment_state == 'present'
+  ansible.builtin.include_tasks: present.yml
+
+- name: Remove the attachment link
+  when:
+    - attachment_state == 'absent'
+    - attachment_existing | length > 0
+  block:
+    - name: Unlink attachments named {{ attachment_resolved_name }}
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: PATCH
+        api_project: "{{ attachment_project }}"
+        api_path: "_apis/wit/workitems/{{ attachment_work_item_id }}"
+        api_content_type: application/json-patch+json
+        api_body: >-
+          {{ [{'op': 'test', 'path': '/rev', 'value': attachment_work_item_rev | int}]
+             + (attachment_relations | ado.workitems.relation_patch(
+                  remove=[{'rel': 'AttachedFile', 'name': attachment_resolved_name}])) }}
+        api_changed: true
+
+    - name: Record the removal
+      ansible.builtin.set_fact:
+        attachment_result:
+          changed: true
+          work_item_id: "{{ attachment_work_item_id }}"
+          removed: "{{ attachment_existing | map(attribute='url') | list }}"
+
+- name: Download the attachment
+  when: attachment_state == 'download'
+  block:
+    - name: Assert the attachment exists and a destination is set
+      ansible.builtin.assert:
+        that:
+          - attachment_existing | length > 0
+          - attachment_dest | length > 0
+        fail_msg: >-
+          Work item {{ attachment_work_item_id }} has no attachment named
+          {{ attachment_resolved_name }}, or attachment_dest is empty.
+        quiet: true
+
+    - name: Save {{ attachment_resolved_name }}
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: GET
+        api_url: "{{ attachment_existing[0].url }}"
+        api_query:
+          fileName: "{{ attachment_resolved_name }}"
+          download: "true"
+        api_dest: "{{ attachment_dest }}"
+        api_changed: true
+
+    - name: Record the download
+      ansible.builtin.set_fact:
+        attachment_result:
+          changed: true
+          work_item_id: "{{ attachment_work_item_id }}"
+          dest: "{{ attachment_dest }}"

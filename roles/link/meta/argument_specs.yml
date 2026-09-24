@@ -1,0 +1,35 @@
+---
+argument_specs:
+  main:
+    short_description: Manage links between Azure DevOps work items
+    description:
+      - Adds or removes one link on a work item. Idempotent. Setting a parent
+        replaces an existing parent, because a work item can have only one.
+      - Equivalent of the parent reference on servicenow.itsm.change_request_task and
+        problem_task, and of configuration_item_relations for work-item-to-work-item
+        relationships.
+      - Returns C(link_result).
+    options:
+      link_project:
+        type: str
+        description: Project name or ID.
+      link_work_item_id:
+        type: int
+        required: true
+        description: Source work item ID.
+      link_state:
+        type: str
+        choices: [present, absent]
+        description: Desired state.
+      link_type:
+        type: str
+        description: Friendly link type or relation reference name.
+      link_target_id:
+        type: int
+        description: Target work item ID.
+      link_target_url:
+        type: str
+        description: Target URL for hyperlinks.
+      link_comment:
+        type: str
+        description: Comment stored on the link.

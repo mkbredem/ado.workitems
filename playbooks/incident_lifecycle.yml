@@ -1,0 +1,94 @@
+---
+# Demonstrates the ServiceNow-style incident flow on Azure Boards.
+#
+# Job template: attach the "Azure DevOps Organization" credential, and a
+# "Microsoft Azure Resource Manager" credential to use a service principal.
+# Survey variables:
+#   incident_lifecycle_reference  - external key such as INC0012345 (required)
+#   incident_lifecycle_action     - open | resolve
+#   incident_lifecycle_summary    - short description
+#   incident_lifecycle_host       - affected host, becomes a child task
+#   incident_lifecycle_log        - optional file on the execution node to attach
+#
+# Run it twice with the same reference: the second run changes nothing.
+# Run it as a Check job type: Azure DevOps validates every change and saves nothing.
+- name: Manage an incident as an Azure Boards work item
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    incident_lifecycle_action: open
+    incident_lifecycle_summary: Service degraded
+    incident_lifecycle_host: ""
+    incident_lifecycle_log: ""
+    # Map ITSM record types to your process template's work item types.
+    incident_lifecycle_type: Bug
+    incident_lifecycle_task_type: Task
+    incident_lifecycle_resolved_state: Resolved
+    incident_lifecycle_title: "{{ incident_lifecycle_reference }} - {{ incident_lifecycle_summary }}"
+  tasks:
+    - name: Assert an incident reference was supplied
+      ansible.builtin.assert:
+        that:
+          - incident_lifecycle_reference is defined
+          - incident_lifecycle_reference | length > 0
+        fail_msg: Set incident_lifecycle_reference, for example INC0012345.
+        quiet: true
+
+    - name: Open or update the incident work item
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_type: "{{ incident_lifecycle_type }}"
+        # The tag is the correlation key that makes the create idempotent.
+        work_item_match:
+          System.Tags:
+            op: CONTAINS
+            value: "{{ incident_lifecycle_reference }}"
+        work_item_title: "{{ incident_lifecycle_title }}"
+        work_item_tags:
+          - aap
+          - "{{ incident_lifecycle_reference }}"
+        work_item_workflow_state: "{{ (incident_lifecycle_action == 'resolve') | ternary(incident_lifecycle_resolved_state, '') }}"
+        work_item_history: >-
+          {{ (incident_lifecycle_action == 'resolve')
+             | ternary('Resolved by automation controller job ' ~ (tower_job_id | default(awx_job_id | default('local'))),
+                       'Updated by automation controller job ' ~ (tower_job_id | default(awx_job_id | default('local')))) }}
+
+    - name: Keep the incident ID
+      ansible.builtin.set_fact:
+        incident_lifecycle_id: "{{ work_item_result.id }}"
+
+    - name: Open a remediation task for the affected host
+      when: incident_lifecycle_host | length > 0
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_type: "{{ incident_lifecycle_task_type }}"
+        work_item_match:
+          System.Title: "Remediate {{ incident_lifecycle_host }} for {{ incident_lifecycle_reference }}"
+        work_item_title: "Remediate {{ incident_lifecycle_host }} for {{ incident_lifecycle_reference }}"
+        work_item_parent_id: "{{ incident_lifecycle_id }}"
+
+    - name: Attach the job log
+      when: incident_lifecycle_log | length > 0
+      ansible.builtin.include_role:
+        name: ado.workitems.attachment
+      vars:
+        attachment_work_item_id: "{{ incident_lifecycle_id }}"
+        attachment_src: "{{ incident_lifecycle_log }}"
+        attachment_comment: Collected by automation controller
+
+    - name: Read back the incident
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item_info
+      vars:
+        work_item_info_ids:
+          - "{{ incident_lifecycle_id }}"
+
+    - name: Show the incident
+      ansible.builtin.debug:
+        msg: >-
+          {{ work_item_info_records[0].type }} {{ work_item_info_records[0].id }}
+          "{{ work_item_info_records[0].title }}" is {{ work_item_info_records[0].state }}
+          ({{ work_item_info_records[0].web_url }})

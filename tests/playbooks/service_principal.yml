@@ -1,0 +1,37 @@
+---
+# Service principal path with the environment variables that the native
+# Microsoft Azure Resource Manager credential injects. The mock server plays
+# both Entra ID (authority host) and Azure DevOps.
+- name: Service principal authentication and token refresh
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ado_workitems_project: Platform Engineering
+  tasks:
+    - name: Create a work item with a bearer token
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_type: Issue
+        work_item_title: Service principal smoke test
+
+    - name: Assert the service principal method was chosen automatically
+      ansible.builtin.assert:
+        that:
+          - auth_ado_method == 'service_principal'
+          - auth_ado_identity.name == 'Mock SP'
+          - work_item_result.changed
+
+    - name: Force a token refresh on the next call
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_path: _apis/tokenRequests
+        api_project: ""
+        api_token_refresh_margin: 100000
+
+    - name: Assert a second token was requested
+      ansible.builtin.assert:
+        that:
+          - api_result.json.count == 2

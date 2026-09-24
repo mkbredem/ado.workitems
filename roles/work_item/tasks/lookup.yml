@@ -1,0 +1,83 @@
+---
+- name: Read the work item by ID
+  when: (work_item_id | default('', true) | string | length > 0)
+  block:
+    - name: Get work item {{ work_item_id }}
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: GET
+        api_project: "{{ work_item_project }}"
+        api_path: "_apis/wit/workitems/{{ work_item_id }}"
+        api_query:
+          $expand: relations
+        api_status_code: [200, 404]
+        api_safe_in_check_mode: true
+
+    - name: Keep the current work item
+      ansible.builtin.set_fact:
+        work_item_current: "{{ (api_result.status | int == 200) | ternary(api_result.json, {}) }}"
+
+    - name: Assert the work item exists when updating by ID
+      ansible.builtin.assert:
+        that:
+          - work_item_current | length > 0 or work_item_state == 'absent'
+        fail_msg: >-
+          Work item {{ work_item_id }} does not exist. To create a work item, omit
+          work_item_id and set work_item_type (optionally with work_item_match).
+        quiet: true
+
+- name: Find the work item by field match
+  when:
+    - (work_item_id | default('', true) | string | length == 0)
+    - work_item_match | length > 0
+  block:
+    - name: Assert a project is set for field match
+      ansible.builtin.assert:
+        that:
+          - work_item_project | length > 0
+        fail_msg: work_item_match needs work_item_project (or ado_workitems_project).
+        quiet: true
+
+    - name: Query work items that match the fields
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: POST
+        api_project: "{{ work_item_project }}"
+        api_path: _apis/wit/wiql
+        api_query:
+          $top: 2
+        api_body:
+          query: >-
+            SELECT [System.Id] FROM WorkItems
+            WHERE [System.TeamProject] = @project
+            AND {{ work_item_match | combine(__type_clause) | ado.workitems.wiql_where }}
+        api_safe_in_check_mode: true
+        __type_clause: >-
+          {{ (work_item_type | default('', true) | string | length > 0) | ternary({'System.WorkItemType': work_item_type}, {}) }}
+
+    - name: Assert the match is unique
+      ansible.builtin.assert:
+        that:
+          - api_result.json.workItems | length <= 1
+        fail_msg: >-
+          work_item_match {{ work_item_match }} matched more than one work item.
+          Add fields to the match or pass work_item_id.
+        quiet: true
+
+    - name: Get the matched work item
+      when: api_result.json.workItems | length == 1
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: GET
+        api_project: "{{ work_item_project }}"
+        api_path: "_apis/wit/workitems/{{ api_result.json.workItems[0].id }}"
+        api_query:
+          $expand: relations
+        api_safe_in_check_mode: true
+
+    - name: Keep the matched work item
+      ansible.builtin.set_fact:
+        work_item_current: "{{ (api_result.json.id is defined) | ternary(api_result.json, {}) }}"

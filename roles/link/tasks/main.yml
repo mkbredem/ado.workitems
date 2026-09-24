@@ -1,0 +1,49 @@
+---
+- name: Read the source work item relations
+  ansible.builtin.include_role:
+    name: ado.workitems.api
+  vars:
+    api_method: GET
+    api_project: "{{ link_project }}"
+    api_path: "_apis/wit/workitems/{{ link_work_item_id }}"
+    api_query:
+      $expand: relations
+    api_safe_in_check_mode: true
+
+- name: Build the link patch
+  vars:
+    __rel: "{{ link_type | ado.workitems.link_type }}"
+    __url: >-
+      {{ (link_target_url | length > 0)
+         | ternary(link_target_url, auth_ado_base_url | ado.workitems.work_item_url(link_target_id | default(0, true))) }}
+    __spec: >-
+      {{ {'rel': __rel, 'url': __url}
+         | combine((link_comment | length > 0) | ternary({'attributes': {'comment': link_comment}}, {})) }}
+  ansible.builtin.set_fact:
+    link_rev: "{{ api_result.json.rev }}"
+    link_patch: >-
+      {{ (link_state == 'present')
+         | ternary(
+             api_result.json.relations | default([], true) | ado.workitems.relation_patch(
+               add=[__spec],
+               exclusive=(__rel == 'System.LinkTypes.Hierarchy-Reverse') | ternary([__rel], [])),
+             api_result.json.relations | default([], true) | ado.workitems.relation_patch(remove=[__spec])) }}
+
+- name: Apply the link change
+  when: link_patch | length > 0
+  ansible.builtin.include_role:
+    name: ado.workitems.api
+  vars:
+    api_method: PATCH
+    api_project: "{{ link_project }}"
+    api_path: "_apis/wit/workitems/{{ link_work_item_id }}"
+    api_content_type: application/json-patch+json
+    api_body: "{{ [{'op': 'test', 'path': '/rev', 'value': link_rev | int}] + link_patch }}"
+    api_changed: true
+
+- name: Record the link result
+  ansible.builtin.set_fact:
+    link_result:
+      changed: "{{ link_patch | length > 0 }}"
+      work_item_id: "{{ link_work_item_id }}"
+      patch: "{{ link_patch }}"

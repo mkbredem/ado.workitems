@@ -1,0 +1,36 @@
+---
+argument_specs:
+  main:
+    short_description: Manage files attached to an Azure DevOps work item
+    description:
+      - Uploads a file and links it to a work item, removes attachment links by name,
+        or downloads an attachment.
+      - Idempotent on file name and SHA-256 checksum. The checksum is kept in the
+        attachment comment, so a changed file with the same name replaces the old link.
+      - Uses simple upload, which Azure DevOps limits to 130 MB per file.
+      - Equivalent of servicenow.itsm.attachment, attachment_upload and attachment_info.
+      - Returns C(attachment_result).
+    options:
+      attachment_project:
+        type: str
+        description: Project name or ID.
+      attachment_work_item_id:
+        type: int
+        required: true
+        description: Work item ID.
+      attachment_state:
+        type: str
+        choices: [present, absent, download]
+        description: Desired state.
+      attachment_src:
+        type: path
+        description: Source file on the Ansible control node.
+      attachment_name:
+        type: str
+        description: Attachment name. Defaults to the source file name.
+      attachment_comment:
+        type: str
+        description: Comment stored with the attachment link.
+      attachment_dest:
+        type: path
+        description: Download destination.

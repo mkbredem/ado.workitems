@@ -1,0 +1,39 @@
+---
+# present creates or updates; absent deletes (recycle bin unless work_item_destroy).
+work_item_state: present
+work_item_project: "{{ ado_workitems_project | default(lookup('ansible.builtin.env', 'ADO_PROJECT')) }}"
+
+# Identify an existing work item by ID, or by field values (idempotent create).
+# work_item_match: {"Custom.ExternalReference": "INC0012345"}
+# A value can also be {op: CONTAINS, value: "..."} for tags or long text.
+work_item_id: null
+work_item_match: {}
+
+# Work item type, required on create. Use the name from your process template
+# (Bug, Issue, Task, User Story, Product Backlog Item, Epic, Feature, ...).
+work_item_type: null
+
+# Common fields. null means "leave unmanaged".
+work_item_title: null
+work_item_description: null
+work_item_workflow_state: null
+work_item_reason: null
+work_item_assigned_to: null
+work_item_area_path: null
+work_item_iteration_path: null
+work_item_priority: null
+work_item_severity: null
+work_item_tags: null
+
+# Any field by reference name. An explicit null clears that field.
+work_item_fields: {}
+
+# Parent work item. Replaces an existing parent link if different.
+work_item_parent_id: null
+
+# Discussion entry recorded only when this run changes the work item.
+work_item_history: null
+
+work_item_destroy: false
+work_item_bypass_rules: false
+work_item_suppress_notifications: false

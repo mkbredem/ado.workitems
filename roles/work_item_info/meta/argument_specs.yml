@@ -1,0 +1,42 @@
+---
+argument_specs:
+  main:
+    short_description: Query Azure DevOps work items
+    description:
+      - Selects work items by ID list, saved query, WIQL or field filter, then reads
+        them in batches of 200.
+      - Equivalent of servicenow.itsm.incident_info, problem_info,
+        change_request_info and the task info modules, with WIQL in place of
+        C(sysparm_query).
+      - Returns C(work_item_info_records) (flattened records) and C(work_item_info_raw).
+    options:
+      work_item_info_project:
+        type: str
+        description: Project name or ID. Required for WIQL, saved query and filters.
+      work_item_info_ids:
+        type: list
+        elements: int
+        description: Work item IDs.
+      work_item_info_saved_query_id:
+        type: str
+        description: ID of a saved flat-list query.
+      work_item_info_wiql:
+        type: str
+        description: WIQL query text.
+      work_item_info_filters:
+        type: dict
+        description: Field filter dict, AND-joined.
+      work_item_info_type:
+        type: str
+        description: Restrict the field filter to one work item type.
+      work_item_info_top:
+        type: int
+        description: Maximum number of work items returned by a query.
+      work_item_info_fields:
+        type: list
+        elements: str
+        description: Field reference names to return.
+      work_item_info_expand:
+        type: str
+        choices: [none, relations, fields, links, all]
+        description: Expansion of the returned work items.

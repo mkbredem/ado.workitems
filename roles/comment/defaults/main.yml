@@ -1,0 +1,13 @@
+---
+comment_project: "{{ ado_workitems_project | default(lookup('ansible.builtin.env', 'ADO_PROJECT')) }}"
+comment_work_item_id: null
+# present adds (or edits, with comment_id) a comment; absent deletes; list reads.
+comment_state: present
+comment_text: ""
+comment_format: markdown
+# Edit or delete this comment instead of adding a new one.
+comment_id: null
+# Skip adding a comment whose text already exists on the work item.
+comment_unique: true
+comment_top: 200
+comment_api_version: 7.1-preview.4

@@ -1,0 +1,11 @@
+---
+attachment_project: "{{ ado_workitems_project | default(lookup('ansible.builtin.env', 'ADO_PROJECT')) }}"
+attachment_work_item_id: null
+# present uploads and links; absent unlinks by name; download saves to attachment_dest.
+attachment_state: present
+# File on the Ansible control node (run these roles against localhost).
+attachment_src: ""
+# Name shown on the work item. Defaults to the source file name.
+attachment_name: ""
+attachment_comment: ""
+attachment_dest: ""

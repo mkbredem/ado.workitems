@@ -1,0 +1,17 @@
+---
+- name: Get work items batch
+  ansible.builtin.include_role:
+    name: ado.workitems.api
+  vars:
+    api_method: POST
+    api_project: "{{ work_item_info_project }}"
+    api_path: _apis/wit/workitemsbatch
+    api_body: >-
+      {{ {'ids': work_item_info_batch_ids, '$expand': work_item_info_expand | title, 'errorPolicy': 'omit'}
+         | combine((work_item_info_fields | length > 0 and work_item_info_expand in ['none', 'links'])
+                   | ternary({'fields': work_item_info_fields}, {})) }}
+    api_safe_in_check_mode: true
+
+- name: Collect the batch
+  ansible.builtin.set_fact:
+    work_item_info_raw: "{{ work_item_info_raw + (api_result.json.value | default([]) | select | list) }}"

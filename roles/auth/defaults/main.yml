@@ -1,0 +1,36 @@
+---
+# Authentication method:
+#   auto              - service_principal if the Microsoft Azure Resource Manager
+#                       credential is attached, else pat if ADO_PAT is set,
+#                       else managed_identity
+#   service_principal - Entra ID client credentials (native AAP credential type)
+#   managed_identity  - Azure Instance Metadata Service on the execution node
+#   pat               - personal access token (custom credential type in docs/)
+auth_method: auto
+
+# Organization name (for example "contoso") or leave empty and set
+# auth_organization_url. The PAT credential type injects ADO_ORGANIZATION.
+auth_organization: "{{ lookup('ansible.builtin.env', 'ADO_ORGANIZATION') }}"
+auth_organization_url: ""
+
+# Service principal inputs. The native "Microsoft Azure Resource Manager"
+# credential injects these environment variables into the job.
+auth_tenant_id: "{{ lookup('ansible.builtin.env', 'AZURE_TENANT') }}"
+auth_client_id: "{{ lookup('ansible.builtin.env', 'AZURE_CLIENT_ID') }}"
+auth_client_secret: "{{ lookup('ansible.builtin.env', 'AZURE_SECRET') }}"
+auth_authority_host: https://login.microsoftonline.com
+
+# Managed identity inputs. Leave the client ID empty for a system-assigned identity.
+auth_managed_identity_client_id: ""
+auth_imds_endpoint: http://169.254.169.254/metadata/identity/oauth2/token
+
+# Personal access token input.
+auth_pat: "{{ lookup('ansible.builtin.env', 'ADO_PAT') }}"
+
+# Azure DevOps first-party application ID in Entra ID (stable, public value).
+auth_ado_resource_id: 499b84ac-1321-427f-aa17-267ca6975798
+
+# Make one read call to prove the identity is a member of the organization.
+auth_verify: true
+auth_validate_certs: true
+auth_timeout: 30

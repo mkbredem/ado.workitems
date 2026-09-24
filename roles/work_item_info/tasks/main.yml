@@ -1,0 +1,72 @@
+---
+- name: Reset results from any earlier call
+  ansible.builtin.set_fact:
+    work_item_info_raw: []
+    work_item_info_selected_ids: "{{ work_item_info_ids | default([], true) }}"
+
+- name: Select IDs with a query
+  when: work_item_info_ids | default([], true) | length == 0
+  block:
+    - name: Assert a selector and project are set
+      ansible.builtin.assert:
+        that:
+          - work_item_info_project | length > 0
+          - >-
+            work_item_info_saved_query_id | length > 0
+            or work_item_info_wiql | length > 0
+            or work_item_info_filters | length > 0
+        fail_msg: >-
+          Set work_item_info_ids, or work_item_info_project together with one of
+          work_item_info_saved_query_id, work_item_info_wiql or work_item_info_filters.
+        quiet: true
+
+    - name: Run the saved query
+      when: work_item_info_saved_query_id | length > 0
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: GET
+        api_project: "{{ work_item_info_project }}"
+        api_path: "_apis/wit/wiql/{{ work_item_info_saved_query_id }}"
+        api_query:
+          $top: "{{ work_item_info_top }}"
+        api_safe_in_check_mode: true
+
+    - name: Run the WIQL query
+      when: work_item_info_saved_query_id | length == 0
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: POST
+        api_project: "{{ work_item_info_project }}"
+        api_path: _apis/wit/wiql
+        api_query:
+          $top: "{{ work_item_info_top }}"
+        api_body:
+          query: >-
+            {% if work_item_info_wiql | length > 0 %}{{ work_item_info_wiql }}{% else %}
+            SELECT [System.Id] FROM WorkItems
+            WHERE [System.TeamProject] = @project
+            AND {{ work_item_info_filters | combine(__type_clause) | ado.workitems.wiql_where }}
+            ORDER BY [System.Id]{% endif %}
+        api_safe_in_check_mode: true
+        __type_clause: >-
+          {{ (work_item_info_type | default('', true) | string | length > 0) | ternary({'System.WorkItemType': work_item_info_type}, {}) }}
+
+    - name: Keep the IDs the query returned
+      ansible.builtin.set_fact:
+        work_item_info_selected_ids: >-
+          {{ (api_result.json.workItems | default([]) | map(attribute='id') | list)
+             + (api_result.json.workItemRelations | default([]) | map(attribute='target')
+                | select('defined') | map(attribute='id') | list) | unique }}
+
+- name: Read work items in batches of 200
+  ansible.builtin.include_tasks: read_batch.yml
+  loop: "{{ work_item_info_selected_ids | unique | batch(200) | list }}"
+  loop_control:
+    loop_var: work_item_info_batch_ids
+    label: "{{ work_item_info_batch_ids | length }} work items"
+
+- name: Flatten records
+  ansible.builtin.set_fact:
+    work_item_info_records: "{{ work_item_info_raw | map('ado.workitems.record') | list }}"

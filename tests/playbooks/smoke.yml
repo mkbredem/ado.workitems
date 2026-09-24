@@ -1,0 +1,217 @@
+---
+# End-to-end idempotency test against tests/mock/mock_ado_server.py.
+- name: Smoke test ado.workitems against the mock server
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ado_workitems_project: Platform Engineering
+    smoke_attachment: "{{ playbook_dir }}/../output/smoke-attachment.txt"
+  tasks:
+    - name: Write an attachment fixture
+      ansible.builtin.copy:
+        dest: "{{ smoke_attachment }}"
+        content: "job 1234 failed on web01\n"
+        mode: "0644"
+
+    - name: Create incident-style bug
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_type: Bug
+        work_item_match:
+          System.Title: "INC0010001 - web01 unreachable"
+        work_item_title: "INC0010001 - web01 unreachable"
+        work_item_description: "<p>Raised by AAP job 1234</p>"
+        work_item_priority: 1
+        work_item_tags: [aap, incident]
+        work_item_assigned_to: ops@example.com
+
+    - name: Assert create changed
+      ansible.builtin.assert:
+        that:
+          - work_item_result.changed
+          - work_item_result.id | int > 0
+          - work_item_result.record.tags == ['aap', 'incident']
+
+    - name: Keep the bug ID
+      ansible.builtin.set_fact:
+        smoke_bug_id: "{{ work_item_result.id }}"
+
+    - name: Re-run the same create
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_type: Bug
+        work_item_match:
+          System.Title: "INC0010001 - web01 unreachable"
+        work_item_title: "INC0010001 - web01 unreachable"
+        work_item_description: "<p>Raised by AAP job 1234</p>"
+        work_item_priority: 1
+        work_item_tags: [incident, aap]
+        work_item_assigned_to: ops@example.com
+
+    - name: Assert re-run is idempotent
+      ansible.builtin.assert:
+        that:
+          - not work_item_result.changed
+          - work_item_result.id | int == smoke_bug_id | int
+          - work_item_result.patch | length == 0
+
+    - name: Transition state with a history entry
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_id: "{{ smoke_bug_id }}"
+        work_item_workflow_state: Active
+        work_item_history: Remediation job started by AAP
+
+    - name: Assert transition changed
+      ansible.builtin.assert:
+        that:
+          - work_item_result.changed
+          - work_item_result.record.state == 'Active'
+
+    - name: Create child task under the bug
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_type: Task
+        work_item_match:
+          System.Title: Restart httpd on web01
+        work_item_title: Restart httpd on web01
+        work_item_parent_id: "{{ smoke_bug_id }}"
+
+    - name: Assert child is linked
+      ansible.builtin.assert:
+        that:
+          - work_item_result.changed
+          - work_item_result.record.parent_id | int == smoke_bug_id | int
+
+    - name: Keep the task ID
+      ansible.builtin.set_fact:
+        smoke_task_id: "{{ work_item_result.id }}"
+
+    - name: Re-run child create
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_type: Task
+        work_item_match:
+          System.Title: Restart httpd on web01
+        work_item_title: Restart httpd on web01
+        work_item_parent_id: "{{ smoke_bug_id }}"
+
+    - name: Assert child re-run is idempotent
+      ansible.builtin.assert:
+        that:
+          - not work_item_result.changed
+
+    - name: Add a comment twice
+      ansible.builtin.include_role:
+        name: ado.workitems.comment
+      vars:
+        comment_work_item_id: "{{ smoke_bug_id }}"
+        comment_text: "Job output attached."
+      loop: [1, 2]
+
+    - name: List comments
+      ansible.builtin.include_role:
+        name: ado.workitems.comment
+      vars:
+        comment_work_item_id: "{{ smoke_bug_id }}"
+        comment_state: list
+
+    - name: Assert comment added once plus the history entry
+      ansible.builtin.assert:
+        that:
+          - comment_list | selectattr('text', 'equalto', 'Job output attached.') | list | length == 1
+          - comment_list | length == 2
+
+    - name: Attach the log twice
+      ansible.builtin.include_role:
+        name: ado.workitems.attachment
+      vars:
+        attachment_work_item_id: "{{ smoke_bug_id }}"
+        attachment_src: "{{ smoke_attachment }}"
+        attachment_comment: AAP job 1234 output
+      loop: [1, 2]
+
+    - name: Assert second upload was skipped
+      ansible.builtin.assert:
+        that:
+          - not attachment_result.changed
+
+    - name: Download the attachment
+      ansible.builtin.include_role:
+        name: ado.workitems.attachment
+      vars:
+        attachment_work_item_id: "{{ smoke_bug_id }}"
+        attachment_name: smoke-attachment.txt
+        attachment_state: download
+        attachment_dest: "{{ playbook_dir }}/../output/downloaded.txt"
+
+    - name: Assert download content
+      ansible.builtin.assert:
+        that:
+          - lookup('ansible.builtin.file', playbook_dir ~ '/../output/downloaded.txt') == 'job 1234 failed on web01'
+
+    - name: Relate the task and bug, twice
+      ansible.builtin.include_role:
+        name: ado.workitems.link
+      vars:
+        link_work_item_id: "{{ smoke_task_id }}"
+        link_type: related
+        link_target_id: "{{ smoke_bug_id }}"
+      loop: [1, 2]
+
+    - name: Assert second link was a no-op
+      ansible.builtin.assert:
+        that:
+          - not link_result.changed
+
+    - name: Create two items with the batch role
+      ansible.builtin.include_role:
+        name: ado.workitems.batch
+      vars:
+        batch_work_items:
+          - {type: Task, title: Patch db01, match: {System.Title: Patch db01}, parent_id: "{{ smoke_bug_id }}"}
+          - {id: "{{ smoke_task_id }}", workflow_state: Closed}
+
+    - name: Assert batch results
+      ansible.builtin.assert:
+        that:
+          - batch_results | length == 2
+          - batch_results | map(attribute='changed') | list == [true, true]
+
+    - name: Query children of the bug
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item_info
+      vars:
+        work_item_info_filters:
+          System.WorkItemType: Task
+
+    - name: Assert query results
+      ansible.builtin.assert:
+        that:
+          - work_item_info_records | length == 2
+          - work_item_info_records | map(attribute='parent_id') | unique | list == [smoke_bug_id | int]
+
+    - name: Delete the bug
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_id: "{{ smoke_bug_id }}"
+        work_item_state: absent
+
+    - name: Delete the bug again
+      ansible.builtin.include_role:
+        name: ado.workitems.work_item
+      vars:
+        work_item_id: "{{ smoke_bug_id }}"
+        work_item_state: absent
+
+    - name: Assert delete is idempotent
+      ansible.builtin.assert:
+        that:
+          - not work_item_result.changed

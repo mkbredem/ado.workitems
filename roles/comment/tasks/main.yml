@@ -1,0 +1,103 @@
+---
+- name: Assert a project is set
+  ansible.builtin.assert:
+    that:
+      - comment_project | length > 0
+    fail_msg: The comments API is project scoped. Set comment_project or ado_workitems_project.
+    quiet: true
+
+- name: Read existing comments
+  ansible.builtin.include_role:
+    name: ado.workitems.api
+  vars:
+    api_method: GET
+    api_project: "{{ comment_project }}"
+    api_path: "_apis/wit/workItems/{{ comment_work_item_id }}/comments"
+    api_version: "{{ comment_api_version }}"
+    api_query:
+      $top: "{{ comment_top }}"
+    api_safe_in_check_mode: true
+
+- name: Keep existing comments
+  ansible.builtin.set_fact:
+    comment_list: "{{ api_result.json.comments | default([]) }}"
+    comment_result:
+      changed: false
+      work_item_id: "{{ comment_work_item_id }}"
+
+- name: Add a comment
+  when:
+    - comment_state == 'present'
+    - (comment_id | default('', true) | string | length == 0)
+    - not (comment_unique | bool and (comment_list | selectattr('text', 'equalto', comment_text) | list | length > 0))
+  block:
+    - name: Send new comment
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: POST
+        api_project: "{{ comment_project }}"
+        api_path: "_apis/wit/workItems/{{ comment_work_item_id }}/comments"
+        api_version: "{{ comment_api_version }}"
+        api_query:
+          format: "{{ comment_format }}"
+        api_body:
+          text: "{{ comment_text }}"
+        api_changed: true
+
+    - name: Record the new comment
+      ansible.builtin.set_fact:
+        comment_result:
+          changed: true
+          work_item_id: "{{ comment_work_item_id }}"
+          comment: "{{ api_result.json }}"
+
+- name: Edit a comment
+  when:
+    - comment_state == 'present'
+    - (comment_id | default('', true) | string | length > 0)
+    - comment_list | selectattr('id', 'equalto', comment_id | int) | selectattr('text', 'equalto', comment_text) | list | length == 0
+  block:
+    - name: Send comment edit
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: PATCH
+        api_project: "{{ comment_project }}"
+        api_path: "_apis/wit/workItems/{{ comment_work_item_id }}/comments/{{ comment_id }}"
+        api_version: "{{ comment_api_version }}"
+        api_query:
+          format: "{{ comment_format }}"
+        api_body:
+          text: "{{ comment_text }}"
+        api_changed: true
+
+    - name: Record the edited comment
+      ansible.builtin.set_fact:
+        comment_result:
+          changed: true
+          work_item_id: "{{ comment_work_item_id }}"
+          comment: "{{ api_result.json }}"
+
+- name: Delete a comment
+  when:
+    - comment_state == 'absent'
+    - comment_list | selectattr('id', 'equalto', comment_id | default(0, true) | int) | list | length > 0
+  block:
+    - name: Send comment delete
+      ansible.builtin.include_role:
+        name: ado.workitems.api
+      vars:
+        api_method: DELETE
+        api_project: "{{ comment_project }}"
+        api_path: "_apis/wit/workItems/{{ comment_work_item_id }}/comments/{{ comment_id }}"
+        api_version: "{{ comment_api_version }}"
+        api_status_code: [200, 204]
+        api_changed: true
+
+    - name: Record the deleted comment
+      ansible.builtin.set_fact:
+        comment_result:
+          changed: true
+          work_item_id: "{{ comment_work_item_id }}"
+          deleted_comment_id: "{{ comment_id }}"

@@ -1,0 +1,7 @@
+---
+# List of work items. Keys are the work_item role options without the
+# "work_item_" prefix, for example:
+#   - {type: Task, title: Patch web01, parent_id: 42, match: {"System.Title": "Patch web01"}}
+#   - {id: 51, workflow_state: Closed}
+batch_work_items: []
+batch_project: "{{ ado_workitems_project | default(lookup('ansible.builtin.env', 'ADO_PROJECT')) }}"

@@ -1,0 +1,35 @@
+---
+# HTTP method and path relative to the organization (or project, when
+# api_project is set). Example: "_apis/wit/workitems/42".
+api_method: GET
+api_path: ""
+# Absolute URL. Overrides api_path and api_project (for URLs that the API returns).
+api_url: ""
+# Project name or ID. Empty sends the call at organization scope.
+api_project: "{{ ado_workitems_project | default(lookup('ansible.builtin.env', 'ADO_PROJECT')) }}"
+# Optional team segment (WIQL and backlog calls).
+api_team: ""
+# Query string parameters. api-version is added automatically.
+api_query: {}
+api_version: "7.1"
+# Request body. Dicts and lists are sent as JSON.
+api_body: null
+api_content_type: application/json
+# Upload a file from the Ansible control node instead of a body.
+api_src: ""
+# Download the response to this path instead of returning content.
+api_dest: ""
+api_status_code: [200]
+# Report the task as changed (writes) or not changed (reads).
+api_changed: false
+# Run this call in check mode. Reads and validateOnly writes are safe.
+api_safe_in_check_mode: false
+# Retry throttled (429) and transient (5xx, connection) failures.
+api_retries: 5
+api_retry_delay: 10
+api_timeout: 60
+# Refresh Entra ID tokens this many seconds before they expire.
+api_token_refresh_margin: 300
+# Hide the request (it carries the Authorization header) from job output.
+# Set false only while debugging; at -vvv the header is then visible.
+api_no_log: true
